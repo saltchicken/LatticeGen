@@ -21,7 +21,8 @@
        <item><property name="text"><string>Planar</string></property></item>
        <item><property name="text"><string>Projected Planar</string></property></item>
        <item><property name="text"><string>Cylindrical</string></property></item>
-       <item><property name="text"><string>Projected Cylindrical</string></property></item>
+       <item><property name="text"><string>Projected Cylindrical (Uniform)</string></property></item>
+       <item><property name="text"><string>Projected Cylindrical (Stretched)</string></property></item>
        <item><property name="text"><string>Spherical</string></property></item>
        <item><property name="text"><string>Projected Spherical</string></property></item>
        <item><property name="text"><string>Radial</string></property></item>
