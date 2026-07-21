@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>TaskPanel</class>
+ <widget class="QWidget" name="TaskPanel">
+  <layout class="QVBoxLayout">
+   <item><widget class="QLabel" name="instruction"><property name="text"><string>Set parameters below to generate pattern.</string></property></widget></item>
+   <item>
+    <layout class="QFormLayout">
+     <item row="0" column="0"><widget class="QLabel"><property name="text"><string>Pattern Shape:</string></property></widget></item>
+     <item row="0" column="1">
+      <widget class="QComboBox" name="pattern_combo">
+       <item><property name="text"><string>Hexagon</string></property></item>
+       <item><property name="text"><string>Square</string></property></item>
+       <item><property name="text"><string>Circle (Staggered)</string></property></item>
+       <item><property name="text"><string>Circle (Grid)</string></property></item>
+       <item><property name="text"><string>Voronoi (Organic)</string></property></item>
+      </widget>
+     </item>
+     <item row="1" column="0"><widget class="QLabel"><property name="text"><string>Mapping:</string></property></widget></item>
+     <item row="1" column="1">
+      <widget class="QComboBox" name="mapping_combo">
+       <item><property name="text"><string>Planar</string></property></item>
+       <item><property name="text"><string>Projected Planar</string></property></item>
+       <item><property name="text"><string>Cylindrical</string></property></item>
+       <item><property name="text"><string>Projected Cylindrical</string></property></item>
+       <item><property name="text"><string>Spherical</string></property></item>
+       <item><property name="text"><string>Projected Spherical</string></property></item>
+       <item><property name="text"><string>Radial</string></property></item>
+       <item><property name="text"><string>Surface UV</string></property></item>
+      </widget>
+     </item>
+     <item row="2" column="0"><widget class="QLabel"><property name="text"><string>Tile Radius (mm):</string></property></widget></item>
+     <item row="2" column="1"><widget class="QDoubleSpinBox" name="radius_spin"><property name="value"><double>8.0</double></property></widget></item>
+     <item row="3" column="0"><widget class="QLabel"><property name="text"><string>Gap Size (mm):</string></property></widget></item>
+     <item row="3" column="1"><widget class="QDoubleSpinBox" name="gap_spin"><property name="value"><double>1.0</double></property></widget></item>
+     <item row="4" column="0"><widget class="QLabel"><property name="text"><string>Extrude Depth (mm):</string></property></widget></item>
+     <item row="4" column="1"><widget class="QDoubleSpinBox" name="depth_spin"><property name="value"><double>5.0</double></property></widget></item>
+     <item row="5" column="0"><widget class="QLabel"><property name="text"><string>Corner Fillet (mm):</string></property></widget></item>
+     <item row="5" column="1"><widget class="QDoubleSpinBox" name="fillet_spin"><property name="value"><double>0.0</double></property></widget></item>
+     <item row="6" column="0"><widget class="QLabel"><property name="text"><string>Border Margin (mm):</string></property></widget></item>
+     <item row="6" column="1"><widget class="QDoubleSpinBox" name="border_spin"><property name="value"><double>0.0</double></property></widget></item>
+     <item row="7" column="0"><widget class="QLabel"><property name="text"><string>Min Visibility (%):</string></property></widget></item>
+     <item row="7" column="1"><widget class="QDoubleSpinBox" name="threshold_spin"><property name="value"><double>0.0</double></property></widget></item>
+     <item row="8" column="0"><widget class="QLabel"><property name="text"><string>X Offset (mm):</string></property></widget></item>
+     <item row="8" column="1"><widget class="QDoubleSpinBox" name="offset_x_spin"><property name="minimum"><double>-1000.0</double></property><property name="maximum"><double>1000.0</double></property></widget></item>
+     <item row="9" column="0"><widget class="QLabel"><property name="text"><string>Y Offset (mm):</string></property></widget></item>
+     <item row="9" column="1"><widget class="QDoubleSpinBox" name="offset_y_spin"><property name="minimum"><double>-1000.0</double></property><property name="maximum"><double>1000.0</double></property></widget></item>
+     <item row="10" column="0"><widget class="QLabel"><property name="text"><string>Operation:</string></property></widget></item>
+     <item row="10" column="1">
+      <widget class="QComboBox" name="operation_combo">
+       <item><property name="text"><string>Cut (Create Lattice)</string></property></item>
+       <item><property name="text"><string>Common (Create Panels)</string></property></item>
+      </widget>
+     </item>
+     <item row="11" column="0"><widget class="QLabel"><property name="text"><string>Preview Mode:</string></property></widget></item>
+     <item row="11" column="1">
+      <widget class="QCheckBox" name="preview_toggle_check">
+       <property name="text"><string>Show Final Product</string></property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item><spacer><property name="orientation"><enum>Qt::Vertical</enum></property></spacer></item>
+  </layout>
+ </widget>
+</ui>

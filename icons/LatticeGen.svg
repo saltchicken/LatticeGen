@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Background -->
+  <rect width="100" height="100" rx="20" fill="#2d3436"/>
+  <!-- Top Right Hexagon -->
+  <polygon points="69.3,16 86.6,26 86.6,46 69.3,56 52,46 52,26" fill="none" stroke="#00cec9" stroke-width="6" stroke-linejoin="round"/>
+  <!-- Bottom Right Hexagon -->
+  <polygon points="69.3,56 86.6,66 86.6,86 69.3,96 52,86 52,66" fill="none" stroke="#00cec9" stroke-width="6" stroke-linejoin="round"/>
+  <!-- Left Hexagon -->
+  <polygon points="34.6,36 52,46 52,66 34.6,76 17.3,66 17.3,46" fill="none" stroke="#00cec9" stroke-width="6" stroke-linejoin="round"/>
+  <!-- Center connecting node -->
+  <circle cx="52" cy="46" r="4" fill="#00cec9"/>
+  <circle cx="52" cy="66" r="4" fill="#00cec9"/>
+  <circle cx="69.3" cy="56" r="4" fill="#00cec9"/>
+</svg>
