@@ -478,14 +478,25 @@ def calculate_pattern_shape(target_obj, target_face=None, pattern="Hexagon", til
         elif mode == "cut": return target_shape.copy()
         else: return Part.makeCompound([])
 
-    pillars = Part.makeCompound(pillar_solids)
+    # 1. Combine all raw, unclipped pillars into a single compound
+    pillars_compound = Part.makeCompound(pillar_solids)
 
-    # 🚀 OPTIMIZATION 2: Apply clipping to the single compound rather than N individual pillars
+    # 2. Perform a SINGLE boolean intersection against the safe_box/clipping_volume
     if clipping_volume:
         try:
-            clipped = pillars.common(clipping_volume)
-            if not clipped.isNull(): pillars = clipped
-        except Exception: pass
+            batched_clipped = pillars_compound.common(clipping_volume)
+            
+            # 3. Re-apply your volume filter to strip out tiny, broken slivers
+            if not batched_clipped.isNull():
+                valid_solids = [s for s in batched_clipped.Solids if s.Volume > 1e-4]
+                pillars = Part.makeCompound(valid_solids)
+            else:
+                pillars = pillars_compound
+        except Exception as e:
+            App.Console.PrintWarning(f"Batched clipping failed: {e}\n")
+            pillars = pillars_compound
+    else:
+        pillars = pillars_compound
 
     if return_tool: return pillars
     
