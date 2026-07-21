@@ -330,7 +330,7 @@ class BaseTaskPanel:
         if self.has_preview:
             self.preview_timer = QtCore.QTimer()
             self.preview_timer.setSingleShot(True)
-            self.preview_timer.setInterval(150)
+            self.preview_timer.setInterval(400)
             self.preview_timer.timeout.connect(self._trigger_preview)
 
             App.ActiveDocument.openTransaction("Preview Transaction")
@@ -388,7 +388,7 @@ class BaseTaskPanel:
 # ==========================================
 # CORE LOGIC
 # ==========================================
-def calculate_pattern_shape(target_obj, target_face=None, pattern="Hexagon", tile_radius=5.0, gap=0.5, mode="cut", offset_x=0.0, offset_y=0.0, inclusion_threshold=0.0, border_size=0.0, fillet_radius=0.0, mapping="Planar", extrude_depth=5.0, return_tool=False):
+def calculate_pattern_shape(target_obj, target_face=None, pattern="Hexagon", tile_radius=5.0, gap=0.5, mode="cut", offset_x=0.0, offset_y=0.0, inclusion_threshold=0.0, border_size=0.0, fillet_radius=0.0, mapping="Planar", extrude_depth=5.0, return_tool=False, is_preview=False):
     """
     Calculates and returns the resulting Shape of a patterned lattice applied to target_obj.
     Supports Planar, Cylindrical, Spherical, Projected (Cylindrical/Spherical/Planar), Radial, and Surface UV mapping modes.
@@ -461,7 +461,8 @@ def calculate_pattern_shape(target_obj, target_face=None, pattern="Hexagon", til
         extrude_vec = strategy.get_extrude_vector(norm, extrude_depth, z_height)
         pillar = tile_face.extrude(extrude_vec)
 
-        if fillet_radius > 0.0 and "Circle" not in pattern:
+        # 🚀 OPTIMIZATION 1: Skip expensive fillets during preview mode
+        if fillet_radius > 0.0 and "Circle" not in pattern and not is_preview:
             edges_to_fillet = [e for e in pillar.Edges if e.Curve.TypeId == 'Part::GeomLine'
                                and abs((e.Vertexes[1].Point - e.Vertexes[0].Point).normalize().dot(norm)) > 0.999]
             if edges_to_fillet:
@@ -470,17 +471,25 @@ def calculate_pattern_shape(target_obj, target_face=None, pattern="Hexagon", til
                     if not filleted.isNull(): pillar = filleted
                 except Exception: pass
 
-        if clipping_volume:
-            try:
-                clipped = pillar.common(clipping_volume)
-                if not clipped.isNull() and clipped.Volume > 1e-4: pillar = clipped
-                else: continue
-            except Exception: pass
-
         pillar_solids.append(pillar)
 
+    if not pillar_solids:
+        if return_tool: return Part.makeCompound([])
+        elif mode == "cut": return target_shape.copy()
+        else: return Part.makeCompound([])
+
     pillars = Part.makeCompound(pillar_solids)
+
+    # 🚀 OPTIMIZATION 2: Apply clipping to the single compound rather than N individual pillars
+    if clipping_volume:
+        try:
+            clipped = pillars.common(clipping_volume)
+            if not clipped.isNull(): pillars = clipped
+        except Exception: pass
+
     if return_tool: return pillars
+    
+    # 🚀 OPTIMIZATION 3: Final booleans are heavy. They now only trigger if required.
     return target_shape.cut(pillars) if mode == "cut" else target_shape.common(pillars)
 
 
@@ -509,7 +518,7 @@ class PatternTaskPanel(BaseTaskPanel):
         if hasattr(self.form, 'preview_toggle_check'):
             self.form.preview_toggle_check.stateChanged.connect(self.queue_preview)
 
-    def get_shape(self, return_tool=True):
+    def get_shape(self, return_tool=True, is_preview=False):
         mode = "cut" if self.form.operation_combo.currentIndex() == 0 else "common"
         return calculate_pattern_shape(
             self.target_obj,
@@ -525,7 +534,8 @@ class PatternTaskPanel(BaseTaskPanel):
             self.form.fillet_spin.value(),
             self.form.mapping_combo.currentText(),
             self.form.depth_spin.value(),
-            return_tool=return_tool
+            return_tool=return_tool,
+            is_preview=is_preview  # <--- Added this line
         )
 
     def calculate_preview(self):
@@ -535,20 +545,20 @@ class PatternTaskPanel(BaseTaskPanel):
             if self.has_preview and hasattr(self, 'preview_obj') and self.preview_obj.ViewObject:
                 self.preview_obj.ViewObject.ShapeColor = getattr(self.target_obj.ViewObject, 'ShapeColor', (0.8, 0.8, 0.8))
                 self.preview_obj.ViewObject.Transparency = getattr(self.target_obj.ViewObject, 'Transparency', 0)
-            return self.get_shape(return_tool=False)
+            return self.get_shape(return_tool=False, is_preview=True) # <--- Added flag
         else:
             self.target_obj.Visibility = True
             if self.has_preview and hasattr(self, 'preview_obj') and self.preview_obj.ViewObject:
                 self.preview_obj.ViewObject.ShapeColor = (1.0, 0.0, 0.0)
                 self.preview_obj.ViewObject.Transparency = 50
-            return self.get_shape(return_tool=True)
+            return self.get_shape(return_tool=True, is_preview=True) # <--- Added flag
 
     def generate_final(self):
         active_body = get_active_body(self.target_obj)
         is_cut = self.form.operation_combo.currentIndex() == 0
 
         if active_body:
-            tool_shape = self.get_shape(return_tool=True)
+            tool_shape = self.get_shape(return_tool=True, is_preview=False) # <--- Added flag
             if tool_shape is None: return
 
             tool_obj = App.ActiveDocument.addObject("Part::Feature", f"{self.target_obj.Name}_LatticeTools")
@@ -564,7 +574,7 @@ class PatternTaskPanel(BaseTaskPanel):
                 bool_feat.ViewObject.ShapeColor = getattr(self.target_obj.ViewObject, 'ShapeColor', (0.8, 0.8, 0.8))
             App.ActiveDocument.recompute()
         else:
-            shape = self.get_shape(return_tool=False)
+            shape = self.get_shape(return_tool=False, is_preview=False) # <--- Added flag
             if shape is None: return
 
             final_obj = App.ActiveDocument.addObject("Part::Feature", f"{self.target_obj.Name}_{'Lattice' if is_cut else 'Panels'}")
