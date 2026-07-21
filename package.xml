@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<package format="1" xmlns="https://wiki.freecad.org/Package_Metadata">
+    <name>LatticeGen</name>
+    <description>Lattice pattern generation and boolean operations.</description>
+    <version>1.0.0</version>
+    <date>2026-07-21</date>
+    <freecadmin>0.21</freecadmin>
+    
+    <maintainer email="your@email.com">Your Name</maintainer>
+    <license file="LICENSE">LGPL-2.1-or-later</license>
+    
+    <icon>freecad/latticegen/resources/icons/LatticeGen.svg</icon>
+    
+    <content>
+        <workbench>
+            <name>LatticeGen</name>
+            <classname>LatticeGenWorkbench</classname>
+            <description>Lattice Generation Tools</description>
+            <subdirectory>./</subdirectory>
+            <icon>freecad/latticegen/resources/icons/LatticeGen.svg</icon>
+        </workbench>
+    </content>
+</package>

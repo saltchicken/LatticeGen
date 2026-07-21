@@ -4,7 +4,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 import Part
 
-from latticegen.constants import NORMAL_DOT_MIN, RAY_OFFSET, TOL_STRICT
+from freecad.latticegen.constants import NORMAL_DOT_MIN, RAY_OFFSET, TOL_STRICT
 
 
 def get_active_body(base_obj=None):

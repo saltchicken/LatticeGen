@@ -4,7 +4,7 @@ import math
 import FreeCAD as App
 import Part
 
-from latticegen.constants import (
+from freecad.latticegen.constants import (
     BOOL_OVERSHOOT,
     BOOL_OVERSHOOT_LARGE,
     BOUNDS_PADDING,

@@ -4,7 +4,7 @@ import DraftGeomUtils
 import FreeCAD as App
 import Part
 
-from latticegen.constants import (
+from freecad.latticegen.constants import (
     BOOL_OVERSHOOT,
     BOOL_OVERSHOOT_LARGE,
     BOUNDS_PADDING,
@@ -13,8 +13,8 @@ from latticegen.constants import (
     TOL_RELAXED,
     TOL_STRICT,
 )
-from latticegen.strategies.base import BaseMappingStrategy
-from latticegen.utils import calculate_projected_normal
+from freecad.latticegen.strategies.base import BaseMappingStrategy
+from freecad.latticegen.utils import calculate_projected_normal
 
 
 class PlanarStrategy(BaseMappingStrategy):

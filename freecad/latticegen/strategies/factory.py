@@ -1,13 +1,13 @@
 """Factory for instantiating mapping strategies."""
 
-from latticegen.strategies.cylindrical import (
+from freecad.latticegen.strategies.cylindrical import (
     CylindricalStrategy,
     ProjectedCylindricalStretchedStrategy,
     ProjectedCylindricalUniformStrategy,
 )
-from latticegen.strategies.planar import PlanarStrategy, ProjectedPlanarStrategy
-from latticegen.strategies.spherical import RadialStrategy, ProjectedSphericalStrategy, SphericalStrategy
-from latticegen.strategies.surface import SurfaceUVStrategy
+from freecad.latticegen.strategies.planar import PlanarStrategy, ProjectedPlanarStrategy
+from freecad.latticegen.strategies.spherical import RadialStrategy, ProjectedSphericalStrategy, SphericalStrategy
+from freecad.latticegen.strategies.surface import SurfaceUVStrategy
 
 
 class MappingFactory:

@@ -4,10 +4,12 @@ import os
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from latticegen.constants import PREVIEW_TRANSPARENCY
-from latticegen.core import calculate_pattern_shape
-from latticegen.ui.base_panel import BaseTaskPanel
-from latticegen.utils import get_active_body
+from freecad.latticegen.constants import PREVIEW_TRANSPARENCY
+from freecad.latticegen.core import calculate_pattern_shape
+from freecad.latticegen.ui.base_panel import BaseTaskPanel
+from freecad.latticegen.utils import get_active_body
+
+from freecad.latticegen.resources import Resources
 
 
 class PatternTaskPanel(BaseTaskPanel):
@@ -17,11 +19,9 @@ class PatternTaskPanel(BaseTaskPanel):
         self.target_obj = target_obj
         self.target_face = target_face
 
-        # Resolve path to ui/lattice_panel.ui relative to project root
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        ui_path = os.path.join(project_root, "ui", "lattice_panel.ui")
-
-        super().__init__(ui_path, has_preview=True)
+        ui_path = Resources._pkg.joinpath("ui/lattice_panel.ui")
+        
+        super().__init__(str(ui_path), has_preview=True)
 
     def setup_ui(self):
         self.form.pattern_combo.currentIndexChanged.connect(self.queue_preview)

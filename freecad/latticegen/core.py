@@ -3,8 +3,8 @@
 import math
 import Part
 
-from latticegen.constants import BOOL_OVERSHOOT_LARGE, FILLET_ALIGN_TOL, TOL_RELAXED
-from latticegen.strategies import MappingFactory
+from freecad.latticegen.constants import BOOL_OVERSHOOT_LARGE, FILLET_ALIGN_TOL, TOL_RELAXED
+from freecad.latticegen.strategies import MappingFactory
 
 
 def calculate_pattern_shape(

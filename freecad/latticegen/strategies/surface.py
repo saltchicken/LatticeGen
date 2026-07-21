@@ -2,8 +2,8 @@
 
 import FreeCAD as App
 
-from latticegen.constants import PERCENT_SCALE, TOL_RELAXED
-from latticegen.strategies.base import BaseMappingStrategy
+from freecad.latticegen.constants import PERCENT_SCALE, TOL_RELAXED
+from freecad.latticegen.strategies.base import BaseMappingStrategy
 
 
 class SurfaceUVStrategy(BaseMappingStrategy):

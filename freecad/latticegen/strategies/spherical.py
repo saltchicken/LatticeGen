@@ -4,9 +4,9 @@ import math
 import FreeCAD as App
 import Part
 
-from latticegen.constants import TOL_RELAXED, TOL_STRICT
-from latticegen.strategies.base import WrapStrategy
-from latticegen.utils import calculate_projected_normal
+from freecad.latticegen.constants import TOL_RELAXED, TOL_STRICT
+from freecad.latticegen.strategies.base import WrapStrategy
+from freecad.latticegen.utils import calculate_projected_normal
 
 
 class SphericalStrategy(WrapStrategy):

@@ -4,7 +4,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 from PySide6 import QtCore, QtWidgets
 
-from latticegen.constants import PREVIEW_DELAY_MS
+from freecad.latticegen.constants import PREVIEW_DELAY_MS
 
 
 class BaseTaskPanel:
