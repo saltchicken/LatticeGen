@@ -8,6 +8,23 @@ import DraftGeomUtils
 from PySide6 import QtCore, QtWidgets
 
 # ==========================================
+# CONSTANTS
+# ==========================================
+TOL_STRICT = 1e-5                   # Strict tolerance for exact equality / zero length
+TOL_RELAXED = 1e-4                  # Relaxed tolerance for intersection and bounding checks
+RAY_OFFSET = 0.1                    # Distance to offset ray test points to avoid self-intersection
+MIN_DENOM = 0.1                     # Minimum denominator to prevent division by zero in stretching
+NORMAL_DOT_MIN = 0.5                # Minimum dot product to consider a normal valid
+BOOL_OVERSHOOT = 1.0                # Small extra length to ensure clean boolean operations
+BOOL_OVERSHOOT_LARGE = 2.0          # Larger overshoot for guaranteed cutting through boundaries
+BOUNDS_PADDING = 100.0              # Buffer distance for safe boundary/plane extraction
+PERCENT_MAX = 99.9                  # Maximum percentage threshold before switching to "all" logic
+PERCENT_SCALE = 100.0               # Scale factor for converting to/from percentages
+FILLET_ALIGN_TOL = 0.999            # Minimum alignment for selecting pillar edges to fillet
+PREVIEW_DELAY_MS = 150              # Debounce timer for UI preview updates
+PREVIEW_TRANSPARENCY = 50           # Transparency value for the preview tool object
+
+# ==========================================
 # UTILITIES
 # ==========================================
 def get_active_body(base_obj=None):
@@ -32,13 +49,13 @@ def get_active_body(base_obj=None):
 # ==========================================
 def calculate_projected_normal(target_shape, pos, ray_dir, hit_shape=True):
     if not hit_shape: return ray_dir
-    test_pt = pos + ray_dir * 0.1
+    test_pt = pos + ray_dir * RAY_OFFSET
     dist, pts, info = target_shape.distToShape(Part.Vertex(test_pt))
-    if pts and dist > 1e-5:
+    if pts and dist > TOL_STRICT:
         norm = test_pt - pts[0][0]
-        if norm.Length > 1e-5:
+        if norm.Length > TOL_STRICT:
             norm.normalize()
-            if norm.dot(ray_dir) > 0.5: return norm
+            if norm.dot(ray_dir) > NORMAL_DOT_MIN: return norm
     return ray_dir
 
 class BaseMappingStrategy:
@@ -56,11 +73,11 @@ class BaseMappingStrategy:
     def get_mapping(self, u, v): raise NotImplementedError
 
     def get_extrude_vector(self, norm, extrude_depth, z_height):
-        return -norm * (extrude_depth + 2.0)
+        return -norm * (extrude_depth + BOOL_OVERSHOOT_LARGE)
 
     def get_clipping_shape(self, border_size): return None
     def is_tile_valid(self, test_pts, inclusion_threshold): return True
-    def get_base_pos(self, pos, norm): return pos + norm * 1.0
+    def get_base_pos(self, pos, norm): return pos + norm * BOOL_OVERSHOOT
     def is_valid_uv(self, u, v, u_min, u_max, v_min, v_max): return True
 
     def setup_grid(self, dx, dy, u_min, u_max, v_min, v_max, is_staggered):
@@ -74,7 +91,7 @@ class PlanarStrategy(BaseMappingStrategy):
         return self.bbox.XMin, self.bbox.XMax, self.bbox.YMin, self.bbox.YMax, offset_x, offset_y
 
     def get_mapping(self, u, v):
-        return App.Vector(u, v, self.bbox.ZMin - 1.0), App.Vector(0, 0, 1), App.Vector(1, 0, 0), App.Vector(0, 1, 0)
+        return App.Vector(u, v, self.bbox.ZMin - BOOL_OVERSHOOT), App.Vector(0, 0, 1), App.Vector(1, 0, 0), App.Vector(0, 1, 0)
 
     def get_base_pos(self, pos, norm): return pos
     def get_extrude_vector(self, norm, extrude_depth, z_height): return App.Vector(0, 0, z_height)
@@ -84,8 +101,10 @@ class PlanarStrategy(BaseMappingStrategy):
         if self.target_shape.ShapeType in ["Face", "Wire"]: base_face = self.target_shape
         else:
             z_mid = (self.bbox.ZMax + self.bbox.ZMin) / 2.0
-            plane = Part.makePlane((self.bbox.XMax - self.bbox.XMin) + 200, (self.bbox.YMax - self.bbox.YMin) + 200,
-                                   App.Vector(self.bbox.XMin - 100, self.bbox.YMin - 100, z_mid), App.Vector(0,0,1))
+            plane = Part.makePlane((self.bbox.XMax - self.bbox.XMin) + (BOUNDS_PADDING * 2),
+                                   (self.bbox.YMax - self.bbox.YMin) + (BOUNDS_PADDING * 2),
+                                   App.Vector(self.bbox.XMin - BOUNDS_PADDING, self.bbox.YMin - BOUNDS_PADDING, z_mid),
+                                   App.Vector(0,0,1))
             cross_section = self.target_shape.section(plane)
             if cross_section.Edges:
                 wires = DraftGeomUtils.findWires(cross_section.Edges)
@@ -104,23 +123,23 @@ class PlanarStrategy(BaseMappingStrategy):
             
             if offset_shape and not offset_shape.isNull():
                 current_z = offset_shape.BoundBox.ZMin
-                offset_shape.translate(App.Vector(0, 0, self.bbox.ZMin - 1.0 - current_z))
-                return offset_shape.extrude(App.Vector(0, 0, self.bbox.ZMax + 2.0 - (self.bbox.ZMin - 1.0)))
+                offset_shape.translate(App.Vector(0, 0, self.bbox.ZMin - BOOL_OVERSHOOT - current_z))
+                return offset_shape.extrude(App.Vector(0, 0, self.bbox.ZMax + BOOL_OVERSHOOT_LARGE - (self.bbox.ZMin - BOOL_OVERSHOOT)))
         except Exception: pass
         return None
 
     def is_tile_valid(self, test_pts, inclusion_threshold):
         if inclusion_threshold <= 0.0: return True
         def is_inside(px, py):
-            line = Part.makeLine(App.Vector(px, py, self.bbox.ZMin - 1.0), App.Vector(px, py, self.bbox.ZMax + 1.0))
-            return line.distToShape(self.target_shape)[0] <= 1e-4
+            line = Part.makeLine(App.Vector(px, py, self.bbox.ZMin - BOOL_OVERSHOOT), App.Vector(px, py, self.bbox.ZMax + BOOL_OVERSHOOT))
+            return line.distToShape(self.target_shape)[0] <= TOL_RELAXED
 
-        pts_to_check = test_pts[:-1] if (len(test_pts) > 1 and test_pts[0].isEqual(test_pts[-1], 1e-5)) else test_pts
+        pts_to_check = test_pts[:-1] if (len(test_pts) > 1 and test_pts[0].isEqual(test_pts[-1], TOL_STRICT)) else test_pts
         if not pts_to_check: return False
-        if inclusion_threshold >= 99.9: return all(is_inside(pt.x, pt.y) for pt in pts_to_check)
+        if inclusion_threshold >= PERCENT_MAX: return all(is_inside(pt.x, pt.y) for pt in pts_to_check)
         
         inside_count = sum(1 for p in pts_to_check if is_inside(p.x, p.y))
-        return (inside_count / len(pts_to_check)) >= (inclusion_threshold / 100.0)
+        return (inside_count / len(pts_to_check)) >= (inclusion_threshold / PERCENT_SCALE)
 
 class ProjectedPlanarStrategy(PlanarStrategy):
     def get_mapping(self, u, v):
@@ -138,13 +157,13 @@ class ProjectedPlanarStrategy(PlanarStrategy):
 
         norm = calculate_projected_normal(self.target_shape, pos, App.Vector(0,0,1), hit_shape)
         tan_u = App.Vector(0,1,0).cross(norm)
-        if tan_u.Length < 1e-4: tan_u = App.Vector(1, 0, 0)
+        if tan_u.Length < TOL_RELAXED: tan_u = App.Vector(1, 0, 0)
         tan_u.normalize()
         tan_v = norm.cross(tan_u).normalize()
         return pos, norm, tan_u, tan_v
         
     def get_extrude_vector(self, norm, extrude_depth, z_height):
-        return -norm * (extrude_depth + 2.0)
+        return -norm * (extrude_depth + BOOL_OVERSHOOT_LARGE)
 
 class WrapStrategy(BaseMappingStrategy):
     def __init__(self, target_shape, bbox, target_face=None):
@@ -153,7 +172,7 @@ class WrapStrategy(BaseMappingStrategy):
         self.wrap_scale = 1.0
 
     def get_clipping_shape(self, border_size):
-        safe_size = self.max_dim * 2.0 + 100.0
+        safe_size = self.max_dim * 2.0 + BOUNDS_PADDING
         if border_size > 0.0:
             z_min = self.bbox.ZMin + border_size
             z_max = self.bbox.ZMax - border_size
@@ -166,12 +185,12 @@ class WrapStrategy(BaseMappingStrategy):
     def is_tile_valid(self, test_pts, inclusion_threshold):
         if inclusion_threshold <= 0.0: return True
         z_min_orig, z_max_orig = self.bbox.ZMin, self.bbox.ZMax
-        pts_to_check = test_pts[:-1] if (len(test_pts) > 1 and test_pts[0].isEqual(test_pts[-1], 1e-5)) else test_pts
+        pts_to_check = test_pts[:-1] if (len(test_pts) > 1 and test_pts[0].isEqual(test_pts[-1], TOL_STRICT)) else test_pts
         if not pts_to_check: return False
-        if inclusion_threshold >= 99.9:
-            return all(z_min_orig - 1e-4 <= pt.z <= z_max_orig + 1e-4 for pt in pts_to_check)
-        inside_count = sum(1 for p in pts_to_check if (z_min_orig - 1e-4 <= p.z <= z_max_orig + 1e-4))
-        return (inside_count / len(pts_to_check)) >= (inclusion_threshold / 100.0)
+        if inclusion_threshold >= PERCENT_MAX:
+            return all(z_min_orig - TOL_RELAXED <= pt.z <= z_max_orig + TOL_RELAXED for pt in pts_to_check)
+        inside_count = sum(1 for p in pts_to_check if (z_min_orig - TOL_RELAXED <= p.z <= z_max_orig + TOL_RELAXED))
+        return (inside_count / len(pts_to_check)) >= (inclusion_threshold / PERCENT_SCALE)
 
     def setup_grid(self, dx, dy, u_min, u_max, v_min, v_max, is_staggered):
         circumference = 2 * math.pi * self.R
@@ -222,7 +241,7 @@ class ProjectedCylindricalStretchedStrategy(WrapStrategy):
         norm = calculate_projected_normal(self.target_shape, pos, ray_dir, hit_shape)
         
         tan_u = App.Vector(0,0,1).cross(norm)
-        if tan_u.Length < 1e-4: 
+        if tan_u.Length < TOL_RELAXED: 
             tan_u = App.Vector(-math.sin(theta), math.cos(theta), 0)
         tan_u.normalize()
         
@@ -230,8 +249,8 @@ class ProjectedCylindricalStretchedStrategy(WrapStrategy):
         
         # Dynamic stretching
         r_hit = (pos - p_center).Length
-        scale_u = self.wrap_scale * (r_hit / self.R) if self.R > 1e-5 else self.wrap_scale
-        scale_v = self.wrap_scale / max(abs(tan_v.z), 0.1)
+        scale_u = self.wrap_scale * (r_hit / self.R) if self.R > TOL_STRICT else self.wrap_scale
+        scale_v = self.wrap_scale / max(abs(tan_v.z), MIN_DENOM)
 
         return pos, norm, tan_u * scale_u, tan_v * scale_v
 
@@ -284,7 +303,7 @@ class ProjectedCylindricalUniformStrategy(WrapStrategy):
         norm = calculate_projected_normal(self.target_shape, pos, ray_dir, hit_shape)
         
         tan_u = App.Vector(0,0,1).cross(norm)
-        if tan_u.Length < 1e-4: 
+        if tan_u.Length < TOL_RELAXED: 
             tan_u = App.Vector(-math.sin(theta), math.cos(theta), 0)
         tan_u.normalize()
         tan_v = norm.cross(tan_u).normalize()
@@ -303,7 +322,7 @@ class SphericalStrategy(WrapStrategy):
         norm = App.Vector(math.cos(theta)*math.sin(phi), math.sin(theta)*math.sin(phi), math.cos(phi)).normalize()
         
         tan_u = App.Vector(-math.sin(theta), math.cos(theta), 0)
-        if tan_u.Length < 1e-4: tan_u = App.Vector(1, 0, 0)
+        if tan_u.Length < TOL_RELAXED: tan_u = App.Vector(1, 0, 0)
         tan_u.normalize()
         tan_v = norm.cross(tan_u).normalize()
         
@@ -329,12 +348,12 @@ class ProjectedSphericalStrategy(SphericalStrategy):
         norm = calculate_projected_normal(self.target_shape, pos, ray_dir, hit_shape)
         
         tan_u = App.Vector(0,0,1).cross(norm)
-        if tan_u.Length < 1e-4: tan_u = App.Vector(1, 0, 0)
+        if tan_u.Length < TOL_RELAXED: tan_u = App.Vector(1, 0, 0)
         tan_u.normalize()
         tan_v = norm.cross(tan_u).normalize()
         
         r_hit = (pos - p_center).Length
-        base_scale = r_hit / self.R if self.R > 1e-5 else 1.0
+        base_scale = r_hit / self.R if self.R > TOL_STRICT else 1.0
         
         # Shrink based on latitude pinch AND projection distance
         scale_u = self.wrap_scale * base_scale * math.sin(phi)
@@ -364,21 +383,21 @@ class SurfaceUVStrategy(BaseMappingStrategy):
             mid_u, mid_v = (u_min + u_max) / 2.0, (v_min + v_max) / 2.0
             len_u = (self.target_face.valueAt(u_max, mid_v) - self.target_face.valueAt(u_min, mid_v)).Length
             len_v = (self.target_face.valueAt(mid_u, v_max) - self.target_face.valueAt(mid_u, v_min)).Length
-            scale_u = (u_max - u_min) / len_u if len_u > 1e-4 else 0
-            scale_v = (v_max - v_min) / len_v if len_v > 1e-4 else 0
+            scale_u = (u_max - u_min) / len_u if len_u > TOL_RELAXED else 0
+            scale_v = (v_max - v_min) / len_v if len_v > TOL_RELAXED else 0
             u_min += border_size * scale_u; u_max -= border_size * scale_u
             v_min += border_size * scale_v; v_max -= border_size * scale_v
 
         ur, vr = (u_max - u_min), (v_max - v_min)
-        offset_x = (offset_x / 100.0) * ur if ur > 0 else offset_x
-        offset_y = (offset_y / 100.0) * vr if vr > 0 else offset_y
+        offset_x = (offset_x / PERCENT_SCALE) * ur if ur > 0 else offset_x
+        offset_y = (offset_y / PERCENT_SCALE) * vr if vr > 0 else offset_y
         return u_min, u_max, v_min, v_max, offset_x, offset_y
 
     def get_mapping(self, u, v):
         pos = self.target_face.valueAt(u, v)
         norm = self.target_face.normalAt(u, v).normalize()
         tan_u = App.Vector(0,0,1).cross(norm)
-        if tan_u.Length < 1e-4: tan_u = App.Vector(1, 0, 0)
+        if tan_u.Length < TOL_RELAXED: tan_u = App.Vector(1, 0, 0)
         tan_u.normalize()
         return pos, norm, tan_u, norm.cross(tan_u).normalize()
 
@@ -430,7 +449,7 @@ class BaseTaskPanel:
         if self.has_preview:
             self.preview_timer = QtCore.QTimer()
             self.preview_timer.setSingleShot(True)
-            self.preview_timer.setInterval(150)
+            self.preview_timer.setInterval(PREVIEW_DELAY_MS)
             self.preview_timer.timeout.connect(self._trigger_preview)
 
             App.ActiveDocument.openTransaction("Preview Transaction")
@@ -554,7 +573,7 @@ def calculate_pattern_shape(target_obj, target_face=None, pattern="Hexagon", til
     # ---------------------------------------------------------
     # EXTRUDE, FILLET, AND SLICE
     # ---------------------------------------------------------
-    z_height = (target_shape.BoundBox.ZMax - target_shape.BoundBox.ZMin + 2.0)
+    z_height = (target_shape.BoundBox.ZMax - target_shape.BoundBox.ZMin + BOOL_OVERSHOOT_LARGE)
     pillar_solids = []
 
     for tile_face, norm in pattern_faces:
@@ -563,7 +582,7 @@ def calculate_pattern_shape(target_obj, target_face=None, pattern="Hexagon", til
 
         if fillet_radius > 0.0 and "Circle" not in pattern:
             edges_to_fillet = [e for e in pillar.Edges if e.Curve.TypeId == 'Part::GeomLine'
-                               and abs((e.Vertexes[1].Point - e.Vertexes[0].Point).normalize().dot(norm)) > 0.999]
+                               and abs((e.Vertexes[1].Point - e.Vertexes[0].Point).normalize().dot(norm)) > FILLET_ALIGN_TOL]
             if edges_to_fillet:
                 try:
                     filleted = pillar.makeFillet(fillet_radius, edges_to_fillet)
@@ -573,7 +592,7 @@ def calculate_pattern_shape(target_obj, target_face=None, pattern="Hexagon", til
         if clipping_volume:
             try:
                 clipped = pillar.common(clipping_volume)
-                if not clipped.isNull() and clipped.Volume > 1e-4: pillar = clipped
+                if not clipped.isNull() and clipped.Volume > TOL_RELAXED: pillar = clipped
                 else: continue
             except Exception: pass
 
@@ -640,7 +659,7 @@ class PatternTaskPanel(BaseTaskPanel):
             self.target_obj.Visibility = True
             if self.has_preview and hasattr(self, 'preview_obj') and self.preview_obj.ViewObject:
                 self.preview_obj.ViewObject.ShapeColor = (1.0, 0.0, 0.0)
-                self.preview_obj.ViewObject.Transparency = 50
+                self.preview_obj.ViewObject.Transparency = PREVIEW_TRANSPARENCY
             return self.get_shape(return_tool=True)
 
     def generate_final(self):
