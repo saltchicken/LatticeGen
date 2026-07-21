@@ -147,6 +147,11 @@ class ProjectedPlanarStrategy(PlanarStrategy):
         return -norm * (extrude_depth + 2.0)
 
 class WrapStrategy(BaseMappingStrategy):
+    def __init__(self, target_shape, bbox, target_face=None):
+        super().__init__(target_shape, bbox, target_face)
+        # Store the scale factor so we can resize the tiles to match the grid adjustments
+        self.wrap_scale = 1.0
+
     def get_clipping_shape(self, border_size):
         safe_size = self.max_dim * 2.0 + 100.0
         if border_size > 0.0:
@@ -173,9 +178,10 @@ class WrapStrategy(BaseMappingStrategy):
         target_cols = max(2, round(circumference / dx))
         if is_staggered and target_cols % 2 != 0: target_cols += 1
         
-        scale_factor = (circumference / target_cols) / dx
+        # Calculate exactly how much the grid stretched to meet the seam perfectly
+        self.wrap_scale = (circumference / target_cols) / dx
         dx = circumference / target_cols
-        dy = dy * scale_factor
+        dy = dy * self.wrap_scale
         
         odd_y_offset = dy / 2.0 if is_staggered else 0.0
         rows = max(2, int((v_max - v_min) / dy) + 2)
@@ -189,7 +195,11 @@ class CylindricalStrategy(WrapStrategy):
         theta = u / self.R
         pos = App.Vector(self.Cx + self.R * math.cos(theta), self.Cy + self.R * math.sin(theta), v)
         norm = App.Vector(math.cos(theta), math.sin(theta), 0)
-        return pos, norm, App.Vector(-math.sin(theta), math.cos(theta), 0), App.Vector(0, 0, 1)
+        
+        # Scale the tiles perfectly with the grid wrap_scale
+        tan_u = App.Vector(-math.sin(theta), math.cos(theta), 0) * self.wrap_scale
+        tan_v = App.Vector(0, 0, 1) * self.wrap_scale
+        return pos, norm, tan_u, tan_v
 
 class ProjectedCylindricalStrategy(WrapStrategy):
     def setup_bounds(self, border_size, offset_x, offset_y):
@@ -211,16 +221,22 @@ class ProjectedCylindricalStrategy(WrapStrategy):
 
         norm = calculate_projected_normal(self.target_shape, pos, ray_dir, hit_shape)
         
-        dist = (pos - p_center).Length
-        scale = dist / self.R if self.R > 1e-5 else 1.0
-
         tan_u = App.Vector(0,0,1).cross(norm)
-        if tan_u.Length < 1e-4: tan_u = App.Vector(-math.sin(theta), math.cos(theta), 0)
+        if tan_u.Length < 1e-4: 
+            tan_u = App.Vector(-math.sin(theta), math.cos(theta), 0)
         tan_u.normalize()
         
         tan_v = norm.cross(tan_u).normalize()
         
-        return pos, norm, tan_u * scale, tan_v * scale
+        # 1. Horizontal arc length stretch (accounts for radius changes)
+        r_hit = (pos - p_center).Length
+        scale_u = self.wrap_scale * (r_hit / self.R) if self.R > 1e-5 else self.wrap_scale
+        
+        # 2. Vertical surface stretch (accounts for slopes like cones). 
+        # tan_v.z tells us the angle of the surface. Max stretch capped at 10x to prevent geometry explosions on flat caps.
+        scale_v = self.wrap_scale / max(abs(tan_v.z), 0.1)
+
+        return pos, norm, tan_u * scale_u, tan_v * scale_v
 
 class SphericalStrategy(WrapStrategy):
     def setup_bounds(self, border_size, offset_x, offset_y):
@@ -231,10 +247,14 @@ class SphericalStrategy(WrapStrategy):
         theta, phi = u / self.R, v / self.R
         pos = App.Vector(self.Cx + self.R*math.cos(theta)*math.sin(phi), self.Cy + self.R*math.sin(theta)*math.sin(phi), self.Cz + self.R*math.cos(phi))
         norm = App.Vector(math.cos(theta)*math.sin(phi), math.sin(theta)*math.sin(phi), math.cos(phi)).normalize()
+        
         tan_u = App.Vector(-math.sin(theta), math.cos(theta), 0)
         if tan_u.Length < 1e-4: tan_u = App.Vector(1, 0, 0)
         tan_u.normalize()
-        return pos, norm, tan_u, norm.cross(tan_u).normalize()
+        tan_v = norm.cross(tan_u).normalize()
+        
+        # Spheres physically pinch at the poles. Shrink the tiles horizontally based on latitude (sin(phi))
+        return pos, norm, tan_u * (self.wrap_scale * math.sin(phi)), tan_v * self.wrap_scale
 
     def is_valid_uv(self, u, v, u_min, u_max, v_min, v_max): return v_min <= v <= v_max
 
@@ -254,16 +274,19 @@ class ProjectedSphericalStrategy(SphericalStrategy):
 
         norm = calculate_projected_normal(self.target_shape, pos, ray_dir, hit_shape)
         
-        dist = (pos - p_center).Length
-        scale = dist / self.R if self.R > 1e-5 else 1.0
-
         tan_u = App.Vector(0,0,1).cross(norm)
         if tan_u.Length < 1e-4: tan_u = App.Vector(1, 0, 0)
         tan_u.normalize()
-        
         tan_v = norm.cross(tan_u).normalize()
         
-        return pos, norm, tan_u * scale, tan_v * scale
+        r_hit = (pos - p_center).Length
+        base_scale = r_hit / self.R if self.R > 1e-5 else 1.0
+        
+        # Shrink based on latitude pinch AND projection distance
+        scale_u = self.wrap_scale * base_scale * math.sin(phi)
+        scale_v = self.wrap_scale * base_scale
+        
+        return pos, norm, tan_u * scale_u, tan_v * scale_v
 
 class RadialStrategy(WrapStrategy):
     def setup_bounds(self, border_size, offset_x, offset_y):
