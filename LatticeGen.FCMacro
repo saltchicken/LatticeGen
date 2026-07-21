@@ -3,19 +3,12 @@ import FreeCADGui as Gui
 import Part
 import PartDesign
 import math
-import random
 import os
 import DraftGeomUtils
 
-# Attempt to load SciPy for Voronoi math
-try:
-    from scipy.spatial import Voronoi
-    HAS_SCIPY = True
-except ImportError:
-    HAS_SCIPY = False
-
 from SharedLib import MacroShared
 from SharedLib.UI import BaseTaskPanel
+from SharedLib.MappingStrategies import MappingFactory
 import importlib
 importlib.reload(MacroShared)
 
@@ -28,450 +21,58 @@ def calculate_pattern_shape(target_obj, target_face=None, pattern="Hexagon", til
     Calculates and returns the resulting Shape of a patterned lattice applied to target_obj.
     Supports Planar, Cylindrical, Spherical, Projected (Cylindrical/Spherical/Planar), Radial, and Surface UV mapping modes.
     """
-    bbox = target_obj.Shape.BoundBox
     target_shape = target_obj.Shape
     step_radius = tile_radius + gap
     pattern_faces = []
 
-    # Calculate geometric centers and max dimensions
-    Cx = (bbox.XMax + bbox.XMin) / 2.0
-    Cy = (bbox.YMax + bbox.YMin) / 2.0
-    Cz = (bbox.ZMax + bbox.ZMin) / 2.0
-    max_dim = max(bbox.XMax - bbox.XMin, bbox.YMax - bbox.YMin, bbox.ZMax - bbox.ZMin)
-    R = max(bbox.XMax - bbox.XMin, bbox.YMax - bbox.YMin) / 2.0
-
-    # Auto-select largest face for Surface UV if none provided
-    if mapping == "Surface UV" and not target_face:
-        faces = target_shape.Faces
-        if faces:
-            target_face = max(faces, key=lambda f: f.Area)
-
-    # Set up UV Bounding Box depending on mapping mode
-    if mapping in ["Spherical", "Projected Spherical"]:
-        R = max_dim / 2.0
-
-    if mapping in ["Cylindrical", "Projected Cylindrical"]:
-        u_min, u_max = 0.0, 2 * math.pi * R
-        v_min, v_max = bbox.ZMin, bbox.ZMax
-    elif mapping in ["Spherical", "Projected Spherical"]:
-        u_min, u_max = 0.0, 2 * math.pi * R
-        v_min, v_max = 0.0, math.pi * R
-    elif mapping == "Radial":
-        u_min, u_max = 0.0, 2 * math.pi * R
-        v_min, v_max = 0.0, R
-    elif mapping == "Surface UV" and target_face:
-        uv_box = target_face.ParameterRange
-        u_min, u_max, v_min, v_max = uv_box[0], uv_box[1], uv_box[2], uv_box[3]
-
-        # Convert physical border_size (mm) to UV parameter space
-        if border_size > 0.0:
-            mid_u, mid_v = (u_min + u_max) / 2.0, (v_min + v_max) / 2.0
-
-            # Approximate the 3D physical length of the U and V domains
-            len_u = (target_face.valueAt(u_max, mid_v) - target_face.valueAt(u_min, mid_v)).Length
-            len_v = (target_face.valueAt(mid_u, v_max) - target_face.valueAt(mid_u, v_min)).Length
-
-            # Calculate conversion scale (UV units per mm)
-            scale_u = (u_max - u_min) / len_u if len_u > 1e-4 else 0
-            scale_v = (v_max - v_min) / len_v if len_v > 1e-4 else 0
-
-            # Inset the UV boundaries
-            u_min += border_size * scale_u
-            u_max -= border_size * scale_u
-            v_min += border_size * scale_v
-            v_max -= border_size * scale_v
-
-        # Scale offsets relative to UV space
-        uv_range_u = u_max - u_min
-        uv_range_v = v_max - v_min
-        offset_x = (offset_x / 100.0) * uv_range_u if uv_range_u > 0 else offset_x
-        offset_y = (offset_y / 100.0) * uv_range_v if uv_range_v > 0 else offset_y
-    else: # Planar and Projected Planar
-        u_min, u_max = bbox.XMin, bbox.XMax
-        v_min, v_max = bbox.YMin, bbox.YMax
-
-    # ---------------------------------------------------------
-    # BOUNDARY FACE CALCULATION (For Area % Checks)
-    # ---------------------------------------------------------
-    # ... (Boundary logic remains mostly the same for planar/basic modes) ...
-    def get_boundary_face(shape, border):
-        if shape.ShapeType in ["Face", "Wire"]:
-            base_face = shape
-        else:
-            z_mid = (bbox.ZMax + bbox.ZMin) / 2.0
-            plane = Part.makePlane((bbox.XMax - bbox.XMin) + 200, (bbox.YMax - bbox.YMin) + 200,
-                                   App.Vector(bbox.XMin - 100, bbox.YMin - 100, z_mid), App.Vector(0,0,1))
-            cross_section = shape.section(plane)
-            if not cross_section.Edges: return None
-            wires = DraftGeomUtils.findWires(cross_section.Edges)
-            closed_wires = [w for w in wires if w.isClosed()]
-            if not closed_wires: return None
-            try:
-                closed_wires.sort(key=lambda w: w.Length, reverse=True)
-                base_face = Part.Face(closed_wires[0])
-            except Exception:
-                return None
-        try:
-            if border > 0.0:
-                offset_shape = base_face.makeOffset2D(-border)
-                if isinstance(offset_shape, list) and offset_shape: offset_shape = offset_shape[0]
-                if offset_shape and offset_shape.ShapeType == "Wire": offset_shape = Part.Face(offset_shape)
-            else:
-                offset_shape = base_face
-
-            if offset_shape and not offset_shape.isNull():
-                current_z = offset_shape.BoundBox.ZMin
-                offset_shape.translate(App.Vector(0, 0, bbox.ZMin - 1.0 - current_z))
-                return offset_shape
-        except Exception:
-            return None
-        return None
-
-    boundary_face = None
-    margin_volume = None
-    original_boundary_face = None
-    safe_box = None
-    original_bounds_box = None
-    safe_size = max_dim * 2.0 + 100.0
-
-    if mapping in ["Planar", "Projected Planar"]: # <-- Updated
-        original_boundary_face = get_boundary_face(target_shape, 0.0)
-        boundary_face = get_boundary_face(target_shape, border_size) if border_size > 0.0 else original_boundary_face
-        if boundary_face:
-            margin_volume = boundary_face.extrude(App.Vector(0, 0, bbox.ZMax + 2.0 - (bbox.ZMin - 1.0)))
-    elif mapping in ["Cylindrical", "Spherical", "Projected Cylindrical", "Projected Spherical"]: # <-- Updated
-        if border_size > 0.0:
-            z_min = bbox.ZMin + border_size
-            z_max = bbox.ZMax - border_size
-            if z_max > z_min:
-                safe_box = Part.makeBox(safe_size, safe_size, z_max - z_min)
-                safe_box.translate(App.Vector(Cx - safe_size/2.0, Cy - safe_size/2.0, z_min))
-        original_bounds_box = Part.makeBox(safe_size, safe_size, bbox.ZMax - bbox.ZMin)
-        original_bounds_box.translate(App.Vector(Cx - safe_size/2.0, Cy - safe_size/2.0, bbox.ZMin))
-
-    def is_point_inside_original(px, py):
-        line = Part.makeLine(App.Vector(px, py, bbox.ZMin - 1.0), App.Vector(px, py, bbox.ZMax + 1.0))
-        return line.distToShape(target_shape)[0] <= 1e-4
-
-    def is_tile_valid(tile_face, test_pts):
-        if inclusion_threshold <= 0.0: return True
-        # Simplified validation for advanced modes (relies on hitting surface)
-        if mapping not in ["Planar", "Cylindrical", "Spherical"]:
-            return True
-        if mapping == "Planar":
-            if inclusion_threshold >= 99.9:
-                return all(is_point_inside_original(pt.x, pt.y) for pt in test_pts)
-            pts_to_check = test_pts[:-1] if (len(test_pts) > 1 and test_pts[0].isEqual(test_pts[-1], 1e-5)) else test_pts
-            if not pts_to_check: return False
-            inside_count = sum(1 for p in pts_to_check if is_point_inside_original(p.x, p.y))
-            return (inside_count / len(pts_to_check)) >= (inclusion_threshold / 100.0)
-        else:
-            z_min_orig, z_max_orig = bbox.ZMin, bbox.ZMax
-            if inclusion_threshold >= 99.9:
-                return all(z_min_orig - 1e-4 <= pt.z <= z_max_orig + 1e-4 for pt in test_pts)
-            pts_to_check = test_pts[:-1] if (len(test_pts) > 1 and test_pts[0].isEqual(test_pts[-1], 1e-5)) else test_pts
-            if not pts_to_check: return False
-            inside_count = sum(1 for p in pts_to_check if (z_min_orig - 1e-4 <= p.z <= z_max_orig + 1e-4))
-            return (inside_count / len(pts_to_check)) >= (inclusion_threshold / 100.0)
-
-    # ---------------------------------------------------------
-    # ADVANCED MAPPING ENGINE
-    # ---------------------------------------------------------
-    def calculate_projected_normal(pos, ray_dir, hit_shape=True):
-        """Helper to find the true curved normal via distToShape"""
-        # If the ray entirely missed the shape, don't look for a normal.
-        if not hit_shape:
-            return ray_dir
-            
-        test_pt = pos + ray_dir * 0.1
-        dist, pts, info = target_shape.distToShape(Part.Vertex(test_pt))
-        
-        if pts and dist > 1e-5:
-            # pts[0][0] is the closest point on target_shape
-            norm = test_pt - pts[0][0]
-            if norm.Length > 1e-5:
-                norm.normalize()
-                # Guard against wild normals near edges by rejecting vectors 
-                # that snap to perpendicular side-walls (60-degree max deviation)
-                if norm.dot(ray_dir) > 0.5:
-                    return norm
-                    
-        return ray_dir
-
-    def get_mapping(u, v):
-        """Maps 2D U, V coordinates to 3D position, normal, and local tangent vectors."""
-        if mapping == "Cylindrical":
-            theta = u / R
-            pos = App.Vector(Cx + R * math.cos(theta), Cy + R * math.sin(theta), v)
-            norm = App.Vector(math.cos(theta), math.sin(theta), 0)
-            tan_u = App.Vector(-math.sin(theta), math.cos(theta), 0)
-            tan_v = App.Vector(0, 0, 1)
-
-        elif mapping == "Projected Cylindrical":
-            theta = u / R
-            p_center = App.Vector(Cx, Cy, v)
-            ray_dir = App.Vector(math.cos(theta), math.sin(theta), 0)
-
-            p_out = p_center + ray_dir * (max_dim * 2.0)
-            ray = Part.makeLine(p_center, p_out)
-            intersections = target_shape.common(ray)
-
-            hit_shape = False
-            if intersections.Vertexes:
-                best_v = max(intersections.Vertexes, key=lambda vtx: (vtx.Point - p_center).Length)
-                pos = best_v.Point
-                hit_shape = True
-            else:
-                pos = App.Vector(Cx + R * math.cos(theta), Cy + R * math.sin(theta), v)
-
-            norm = calculate_projected_normal(pos, ray_dir, hit_shape)
-            tan_u = App.Vector(0,0,1).cross(norm)
-            if tan_u.Length < 1e-4: tan_u = App.Vector(-math.sin(theta), math.cos(theta), 0)
-            tan_u.normalize()
-            tan_v = norm.cross(tan_u).normalize()
-
-        elif mapping == "Spherical":
-            theta = u / R
-            phi = v / R
-            pos = App.Vector(Cx + R*math.cos(theta)*math.sin(phi), Cy + R*math.sin(theta)*math.sin(phi), Cz + R*math.cos(phi))
-            norm = App.Vector(math.cos(theta)*math.sin(phi), math.sin(theta)*math.sin(phi), math.cos(phi)).normalize()
-            tan_u = App.Vector(-math.sin(theta), math.cos(theta), 0)
-            if tan_u.Length < 1e-4: tan_u = App.Vector(1, 0, 0)
-            tan_u.normalize()
-            tan_v = norm.cross(tan_u).normalize()
-
-        elif mapping == "Projected Spherical":
-            theta = u / R
-            phi = v / R
-            p_center = App.Vector(Cx, Cy, Cz)
-            ray_dir = App.Vector(math.cos(theta)*math.sin(phi), math.sin(theta)*math.sin(phi), math.cos(phi)).normalize()
-
-            p_out = p_center + ray_dir * (max_dim * 2.0)
-            ray = Part.makeLine(p_center, p_out)
-            intersections = target_shape.common(ray)
-
-            hit_shape = False
-            if intersections.Vertexes:
-                best_v = max(intersections.Vertexes, key=lambda vtx: (vtx.Point - p_center).Length)
-                pos = best_v.Point
-                hit_shape = True
-            else:
-                pos = p_center + ray_dir * R
-
-            norm = calculate_projected_normal(pos, ray_dir, hit_shape)
-            tan_u = App.Vector(0,0,1).cross(norm)
-            if tan_u.Length < 1e-4: tan_u = App.Vector(1, 0, 0)
-            tan_u.normalize()
-            tan_v = norm.cross(tan_u).normalize()
-
-        elif mapping == "Radial":
-            theta = u / R
-            r_val = v
-            pos = App.Vector(Cx + r_val * math.cos(theta), Cy + r_val * math.sin(theta), bbox.ZMax)
-            norm = App.Vector(0, 0, 1)
-            tan_u = App.Vector(-math.sin(theta), math.cos(theta), 0)
-            tan_v = App.Vector(math.cos(theta), math.sin(theta), 0)
-
-        elif mapping == "Projected Planar":
-            p_top = App.Vector(u, v, bbox.ZMax + max_dim)
-            p_bot = App.Vector(u, v, bbox.ZMin - max_dim)
-            ray_dir = App.Vector(0, 0, -1)
-            ray = Part.makeLine(p_top, p_bot)
-            intersections = target_shape.common(ray)
-
-            hit_shape = False
-            if intersections.Vertexes:
-                pos = max(intersections.Vertexes, key=lambda vtx: vtx.Point.z).Point
-                hit_shape = True
-            else:
-                pos = App.Vector(u, v, bbox.ZMax)
-
-            norm = calculate_projected_normal(pos, App.Vector(0,0,1), hit_shape)
-            tan_u = App.Vector(0,1,0).cross(norm)
-            if tan_u.Length < 1e-4: tan_u = App.Vector(1, 0, 0)
-            tan_u.normalize()
-            tan_v = norm.cross(tan_u).normalize()
-
-        elif mapping == "Surface UV" and target_face:
-            pos = target_face.valueAt(u, v)
-            norm = target_face.normalAt(u, v).normalize()
-            tan_u = App.Vector(0,0,1).cross(norm)
-            if tan_u.Length < 1e-4: tan_u = App.Vector(1, 0, 0)
-            tan_u.normalize()
-            tan_v = norm.cross(tan_u).normalize()
-
-        else: # Planar
-            pos = App.Vector(u, v, bbox.ZMin - 1.0)
-            norm = App.Vector(0, 0, 1)
-            tan_u = App.Vector(1, 0, 0)
-            tan_v = App.Vector(0, 1, 0)
-
-        return pos, norm, tan_u, tan_v
-
-    # ---------------------------------------------------------
-    # VORONOI GENERATION
-    # ---------------------------------------------------------
-    if pattern == "Voronoi (Organic)":
-        if not HAS_SCIPY:
-            App.Console.PrintError("SciPy is missing. Cannot generate Voronoi pattern.\n")
-            return Part.makeCompound([]) if return_tool else target_obj.Shape.copy()
-
-        dx = dy = 1.5 * step_radius
-        if mapping == "Surface UV":
-            # Scale density based on parameter space size
-            dx = (u_max - u_min) / 10.0
-            dy = (v_max - v_min) / 10.0
-            gap_uv = (gap / max_dim) * ((u_max - u_min + v_max - v_min)/2.0)
-
-        cols = max(2, int((u_max - u_min) / dx) + 2)
-        rows = max(2, int((v_max - v_min) / dy) + 2)
-        seed_points = []
-        random.seed(hash((offset_x, offset_y)))
-
-        for c in range(-1, cols + 1):
-            for r in range(-1, rows + 1):
-                u = u_min + c * dx + offset_x
-                v = v_min + r * dy + offset_y
-                u += random.uniform(-0.45, 0.45) * dx
-                v += random.uniform(-0.45, 0.45) * dy
-                seed_points.append([u, v])
-
-        vor = Voronoi(seed_points)
-
-        for region_index in vor.point_region:
-            region = vor.regions[region_index]
-            if not region or -1 in region: continue
-
-            raw_uv = [(vor.vertices[i][0], vor.vertices[i][1]) for i in region]
-            centroid_u = sum(p[0] for p in raw_uv) / len(raw_uv)
-            centroid_v = sum(p[1] for p in raw_uv) / len(raw_uv)
-
-            wrap_modes = ["Cylindrical", "Spherical", "Projected Cylindrical", "Projected Spherical", "Radial"]
-            if mapping in wrap_modes:
-                if centroid_u < (u_min + offset_x) or centroid_u >= (u_max + offset_x): continue
-            if mapping in ["Spherical", "Projected Spherical"]:
-                if centroid_v < (v_min + offset_y) or centroid_v > (v_max + offset_y): continue
-
-            pos, norm, tan_u, tan_v = get_mapping(centroid_u, centroid_v)
-            base_pos = pos if mapping in ["Planar", "Radial"] else (pos + norm * 5.0)
-
-            inset_pts_3d = []
-            for p in raw_uv:
-                vec_u = p[0] - centroid_u
-                vec_v = p[1] - centroid_v
-                dist = math.hypot(vec_u, vec_v)
-
-                if mapping == "Surface UV":
-                    move_dist = min(gap_uv / 2.0, dist * 0.9)
-                else:
-                    move_dist = min(gap / 2.0, dist * 0.9)
-
-                if dist > 1e-5:
-                    vec_u /= dist
-                    vec_v /= dist
-
-                final_u = p[0] - vec_u * move_dist
-                final_v = p[1] - vec_v * move_dist
-
-                if mapping == "Surface UV":
-                    # For Surface UV, recalculate 3D directly from inset UVs
-                    pt_3d = target_face.valueAt(final_u, final_v)
-                else:
-                    dx_loc = final_u - centroid_u
-                    dy_loc = final_v - centroid_v
-                    pt_3d = base_pos + tan_u * dx_loc + tan_v * dy_loc
-                inset_pts_3d.append(pt_3d)
-
-            inset_pts_3d.append(inset_pts_3d[0])
-            polygon = Part.makePolygon(inset_pts_3d)
-            tile_face = Part.Face(polygon)
-
-            if is_tile_valid(tile_face, inset_pts_3d):
-                pattern_faces.append((tile_face, norm))
+    # 1. Initialize Strategy
+    strategy = MappingFactory.create(mapping, target_shape, target_face)
+    u_min, u_max, v_min, v_max, offset_x, offset_y = strategy.setup_bounds(border_size, offset_x, offset_y)
+    clipping_volume = strategy.get_clipping_shape(border_size)
 
     # ---------------------------------------------------------
     # STANDARD GEOMETRIC GENERATION
     # ---------------------------------------------------------
-    else:
-        is_staggered = False
-        if pattern == "Hexagon":
-            dx = 1.5 * step_radius
-            dy = math.sqrt(3) * step_radius
-            odd_y_offset = dy / 2.0
-            is_staggered = True
-        elif pattern == "Square":
-            dx = dy = 2.0 * step_radius
-            odd_y_offset = 0.0
-        elif pattern == "Circle (Grid)":
-            dx = dy = 2.0 * step_radius
-            odd_y_offset = 0.0
-        elif pattern == "Circle (Staggered)":
-            dx = math.sqrt(3) * step_radius
-            dy = 2.0 * step_radius
-            odd_y_offset = dy / 2.0
-            is_staggered = True
+    is_staggered = False
+    if pattern == "Hexagon":
+        dx, dy, is_staggered = 1.5 * step_radius, math.sqrt(3) * step_radius, True
+    elif pattern == "Square" or pattern == "Circle (Grid)":
+        dx = dy = 2.0 * step_radius
+    elif pattern == "Circle (Staggered)":
+        dx, dy, is_staggered = math.sqrt(3) * step_radius, 2.0 * step_radius, True
 
-        wrap_modes = ["Cylindrical", "Spherical", "Projected Cylindrical", "Projected Spherical", "Radial"]
+    target_cols, rows, c_start, c_end, dx, dy, odd_y_offset = strategy.setup_grid(
+        dx, dy, u_min, u_max, v_min, v_max, is_staggered
+    )
 
-        if mapping == "Surface UV":
-            # Scale density for UV space
-            dx = (dx / max_dim) * (u_max - u_min)
-            dy = (dy / max_dim) * (v_max - v_min)
-            odd_y_offset = dy / 2.0 if is_staggered else 0.0
-            target_cols = max(2, int((u_max - u_min) / dx) + 2)
-            c_start, c_end = -1, target_cols
-        elif mapping in wrap_modes:
-            circumference = 2 * math.pi * R
-            target_cols = max(2, round(circumference / dx))
-            if is_staggered and target_cols % 2 != 0: target_cols += 1
-            dx = circumference / target_cols
-            c_start, c_end = 0, target_cols
-        else:
-            target_cols = max(2, int((u_max - u_min) / dx) + 2)
-            c_start, c_end = -1, target_cols
+    for c in range(c_start, c_end):
+        for r in range(-1, rows):
+            u = u_min + c * dx + offset_x
+            v = v_min + r * dy + offset_y
+            if c % 2 != 0: v += odd_y_offset
 
-        rows = max(2, int((v_max - v_min) / dy) + 2)
+            if not strategy.is_valid_uv(u, v, u_min, u_max, v_min, v_max): continue
 
-        for c in range(c_start, c_end):
-            for r in range(-1, rows):
-                u = u_min + c * dx + offset_x
-                v = v_min + r * dy + offset_y
-                if c % 2 != 0: v += odd_y_offset
+            pos, norm, tan_u, tan_v = strategy.get_mapping(u, v)
+            base_pos = strategy.get_base_pos(pos, norm)
 
-                if mapping in ["Spherical", "Projected Spherical"]:
-                    if v < v_min or v > v_max: continue
-                if mapping == "Radial":
-                    if v > v_max: continue
-                if mapping == "Surface UV":
-                    if not (u_min <= u <= u_max and v_min <= v <= v_max): continue
-
-                pos, norm, tan_u, tan_v = get_mapping(u, v)
-                base_pos = pos if mapping in ["Planar", "Radial"] else (pos + norm * 1.0)
-
-                local_pts = []
+            if "Circle" in pattern:
+                circle_edge = Part.makeCircle(tile_radius, base_pos, norm)
+                tile_face = Part.Face(Part.Wire(circle_edge))
+                if strategy.is_tile_valid([base_pos], inclusion_threshold):
+                    pattern_faces.append((tile_face, norm))
+            else:
                 if pattern == "Hexagon":
-                    for i in range(6):
-                        angle = math.radians(i * 60)
-                        local_pts.append((tile_radius * math.cos(angle), tile_radius * math.sin(angle)))
-                elif pattern == "Square":
-                    r_sq = tile_radius
-                    local_pts = [(-r_sq, -r_sq), (r_sq, -r_sq), (r_sq, r_sq), (-r_sq, r_sq)]
+                    local_pts = [(tile_radius * math.cos(math.radians(i * 60)), tile_radius * math.sin(math.radians(i * 60))) for i in range(6)]
+                else: # Square
+                    local_pts = [(-tile_radius, -tile_radius), (tile_radius, -tile_radius), (tile_radius, tile_radius), (-tile_radius, tile_radius)]
 
-                if "Circle" in pattern:
-                    circle_edge = Part.makeCircle(tile_radius, base_pos, norm)
-                    tile_face = Part.Face(Part.Wire(circle_edge))
-                    if is_tile_valid(tile_face, [base_pos]):
-                        pattern_faces.append((tile_face, norm))
-                else:
-                    test_pts_3d = []
-                    for lx, ly in local_pts:
-                        test_pts_3d.append(base_pos + tan_u * lx + tan_v * ly)
-                    test_pts_3d.append(test_pts_3d[0])
-                    polygon = Part.makePolygon(test_pts_3d)
-                    tile_face = Part.Face(polygon)
+                test_pts_3d = [base_pos + tan_u * lx + tan_v * ly for lx, ly in local_pts]
+                test_pts_3d.append(test_pts_3d[0])
+                tile_face = Part.Face(Part.makePolygon(test_pts_3d))
 
-                    if is_tile_valid(tile_face, test_pts_3d):
-                        pattern_faces.append((tile_face, norm))
+                if strategy.is_tile_valid(test_pts_3d, inclusion_threshold):
+                    pattern_faces.append((tile_face, norm))
 
     if not pattern_faces:
         if return_tool: return Part.makeCompound([])
@@ -481,16 +82,11 @@ def calculate_pattern_shape(target_obj, target_face=None, pattern="Hexagon", til
     # ---------------------------------------------------------
     # EXTRUDE, FILLET, AND SLICE
     # ---------------------------------------------------------
-    z_height = (bbox.ZMax - bbox.ZMin + 2.0)
+    z_height = (target_shape.BoundBox.ZMax - target_shape.BoundBox.ZMin + 2.0)
     pillar_solids = []
 
     for tile_face, norm in pattern_faces:
-        if mapping in ["Planar", "Radial"]:
-            extrude_vec = App.Vector(0, 0, z_height)
-        else:
-            # Projected mappings extrude inward along their local normal
-            extrude_vec = -norm * (extrude_depth + 2.0)
-
+        extrude_vec = strategy.get_extrude_vector(norm, extrude_depth, z_height)
         pillar = tile_face.extrude(extrude_vec)
 
         if fillet_radius > 0.0 and "Circle" not in pattern:
@@ -502,15 +98,9 @@ def calculate_pattern_shape(target_obj, target_face=None, pattern="Hexagon", til
                     if not filleted.isNull(): pillar = filleted
                 except Exception: pass
 
-        if mapping in ["Planar", "Projected Planar"] and margin_volume:
+        if clipping_volume:
             try:
-                clipped = pillar.common(margin_volume)
-                if not clipped.isNull() and clipped.Volume > 1e-4: pillar = clipped
-                else: continue
-            except Exception: pass
-        elif mapping in ["Cylindrical", "Spherical", "Projected Cylindrical", "Projected Spherical"] and safe_box:
-            try:
-                clipped = pillar.common(safe_box)
+                clipped = pillar.common(clipping_volume)
                 if not clipped.isNull() and clipped.Volume > 1e-4: pillar = clipped
                 else: continue
             except Exception: pass

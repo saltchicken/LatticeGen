@@ -13,7 +13,6 @@
        <item><property name="text"><string>Square</string></property></item>
        <item><property name="text"><string>Circle (Staggered)</string></property></item>
        <item><property name="text"><string>Circle (Grid)</string></property></item>
-       <item><property name="text"><string>Voronoi (Organic)</string></property></item>
       </widget>
      </item>
      <item row="1" column="0"><widget class="QLabel"><property name="text"><string>Mapping:</string></property></widget></item>
