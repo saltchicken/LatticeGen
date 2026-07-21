@@ -10,14 +10,4 @@
     <license file="LICENSE">LGPL-2.1-or-later</license>
     
     <icon>freecad/latticegen/resources/icons/LatticeGen.svg</icon>
-    
-    <content>
-        <workbench>
-            <name>LatticeGen</name>
-            <classname>LatticeGenWorkbench</classname>
-            <description>Lattice Generation Tools</description>
-            <subdirectory>./</subdirectory>
-            <icon>freecad/latticegen/resources/icons/LatticeGen.svg</icon>
-        </workbench>
-    </content>
 </package>
