@@ -172,7 +172,11 @@ class WrapStrategy(BaseMappingStrategy):
         circumference = 2 * math.pi * self.R
         target_cols = max(2, round(circumference / dx))
         if is_staggered and target_cols % 2 != 0: target_cols += 1
+        
+        scale_factor = (circumference / target_cols) / dx
         dx = circumference / target_cols
+        dy = dy * scale_factor
+        
         odd_y_offset = dy / 2.0 if is_staggered else 0.0
         rows = max(2, int((v_max - v_min) / dy) + 2)
         return target_cols, rows, 0, target_cols, dx, dy, odd_y_offset
@@ -206,10 +210,17 @@ class ProjectedCylindricalStrategy(WrapStrategy):
             pos = App.Vector(self.Cx + self.R * math.cos(theta), self.Cy + self.R * math.sin(theta), v)
 
         norm = calculate_projected_normal(self.target_shape, pos, ray_dir, hit_shape)
+        
+        dist = (pos - p_center).Length
+        scale = dist / self.R if self.R > 1e-5 else 1.0
+
         tan_u = App.Vector(0,0,1).cross(norm)
         if tan_u.Length < 1e-4: tan_u = App.Vector(-math.sin(theta), math.cos(theta), 0)
         tan_u.normalize()
-        return pos, norm, tan_u, norm.cross(tan_u).normalize()
+        
+        tan_v = norm.cross(tan_u).normalize()
+        
+        return pos, norm, tan_u * scale, tan_v * scale
 
 class SphericalStrategy(WrapStrategy):
     def setup_bounds(self, border_size, offset_x, offset_y):
@@ -242,10 +253,17 @@ class ProjectedSphericalStrategy(SphericalStrategy):
         else: pos = p_center + ray_dir * self.R
 
         norm = calculate_projected_normal(self.target_shape, pos, ray_dir, hit_shape)
+        
+        dist = (pos - p_center).Length
+        scale = dist / self.R if self.R > 1e-5 else 1.0
+
         tan_u = App.Vector(0,0,1).cross(norm)
         if tan_u.Length < 1e-4: tan_u = App.Vector(1, 0, 0)
         tan_u.normalize()
-        return pos, norm, tan_u, norm.cross(tan_u).normalize()
+        
+        tan_v = norm.cross(tan_u).normalize()
+        
+        return pos, norm, tan_u * scale, tan_v * scale
 
 class RadialStrategy(WrapStrategy):
     def setup_bounds(self, border_size, offset_x, offset_y):
