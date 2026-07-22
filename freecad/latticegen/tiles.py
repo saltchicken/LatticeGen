@@ -1,11 +1,40 @@
 """Tile generation factory and classes for 2D patterns."""
 
 import math
-
 import Part
 
 
-class HexagonTile:
+# Global registry for automatic UI and Factory population
+PATTERN_REGISTRY = {}
+
+
+class BaseTile:
+    """Base class that automatically registers new patterns."""
+    name = "Base"
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if cls.name != "Base":
+            PATTERN_REGISTRY[cls.name] = cls
+
+    @classmethod
+    def get_grid_dimensions(cls, step_radius: float):
+        """Default to a standard square grid spacing."""
+        return 2.0 * step_radius, 2.0 * step_radius, False
+
+    @staticmethod
+    def create_face(base_pos, norm, tan_u, tan_v, radius):
+        raise NotImplementedError
+
+
+class HexagonTile(BaseTile):
+    name = "Hexagon"
+
+    @classmethod
+    def get_grid_dimensions(cls, step_radius: float):
+        dx = 1.5 * step_radius
+        dy = math.sqrt(3) * step_radius
+        return dx, dy, True
 
     @staticmethod
     def create_face(base_pos, norm, tan_u, tan_v, radius):
@@ -21,7 +50,9 @@ class HexagonTile:
         return face, test_pts_3d
 
 
-class SquareTile:
+class SquareTile(BaseTile):
+    name = "Square"
+    # Inherits default 2.0 x 2.0 grid from BaseTile
 
     @staticmethod
     def create_face(base_pos, norm, tan_u, tan_v, radius):
@@ -39,54 +70,61 @@ class SquareTile:
         return face, test_pts_3d
 
 
-class CircleTile:
-
+class BaseCircleTile(BaseTile):
+    """Shared creation logic for both circle types."""
     @staticmethod
     def create_face(base_pos, norm, tan_u, tan_v, radius):
         circle_edge = Part.makeCircle(radius, base_pos, norm)
         face = Part.Face(Part.Wire(circle_edge))
-        return face, [base_pos
-                     ]  # Circles evaluate inclusion using just their center
+        return face, [base_pos]
 
-class KagomeTile:
-    """
-    Generates a 12-pointed Hexagram (Star of David) tile. 
-    When cut on a staggered grid, it leaves behind a Kagome lattice web.
-    """
+
+class CircleGridTile(BaseCircleTile):
+    name = "Circle (Grid)"
+    # Inherits default 2.0 x 2.0 grid
+
+
+class CircleStaggeredTile(BaseCircleTile):
+    name = "Circle (Staggered)"
+
+    @classmethod
+    def get_grid_dimensions(cls, step_radius: float):
+        dx = math.sqrt(3) * step_radius
+        dy = 2.0 * step_radius
+        return dx, dy, True
+
+
+class KagomeTile(BaseTile):
+    name = "Kagome (Hexagram)"
+
+    @classmethod
+    def get_grid_dimensions(cls, step_radius: float):
+        dx = 1.5 * step_radius
+        dy = math.sqrt(3) * step_radius
+        return dx, dy, True
+
     @staticmethod
     def create_face(base_pos, norm, tan_u, tan_v, radius):
-        # A standard hexagram has an inner radius that is 1/sqrt(3) of the outer radius
         inner_radius = radius / math.sqrt(3)
         local_pts = []
-        
         for i in range(12):
             angle = math.radians(i * 30)
-            # Alternate between outer and inner radius
             r = radius if i % 2 == 0 else inner_radius
-            
-            x = r * math.cos(angle)
-            y = r * math.sin(angle)
-            local_pts.append((x, y))
+            local_pts.append((r * math.cos(angle), r * math.sin(angle)))
 
-        test_pts_3d = [
-            base_pos + tan_u * lx + tan_v * ly for lx, ly in local_pts
-        ]
-        test_pts_3d.append(test_pts_3d[0])  # Close the polygon
-        
+        test_pts_3d = [base_pos + tan_u * lx + tan_v * ly for lx, ly in local_pts]
+        test_pts_3d.append(test_pts_3d[0])
         face = Part.Face(Part.makePolygon(test_pts_3d))
         return face, test_pts_3d
+
 
 class TileFactory:
     """Instantiates a 2D tile generator based on the pattern string."""
 
     @staticmethod
     def create(pattern: str):
-        if pattern == "Hexagon":
-            return HexagonTile
-        elif pattern == "Square":
-            return SquareTile
-        elif "Circle" in pattern:
-            return CircleTile
-        elif pattern == "Kagome (Hexagram)":
-            return KagomeTile
-        return HexagonTile
+        return PATTERN_REGISTRY.get(pattern, HexagonTile)
+
+    @staticmethod
+    def get_available_patterns() -> list:
+        return list(PATTERN_REGISTRY.keys())

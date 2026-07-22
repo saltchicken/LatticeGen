@@ -13,36 +13,17 @@ from freecad.latticegen.strategies import MappingFactory
 from freecad.latticegen.tiles import TileFactory
 
 
-def _get_grid_dimensions(pattern: str, step_radius: float):
-    is_staggered = False
-
-    if pattern in ["Hexagon", "Kagome (Hexagram)"]:
-        dx = 1.5 * step_radius
-        dy = math.sqrt(3) * step_radius
-        is_staggered = True
-    elif pattern in ["Square", "Circle (Grid)"]:
-        dx = dy = 2.0 * step_radius
-    elif pattern == "Circle (Staggered)":
-        dx = math.sqrt(3) * step_radius
-        dy = 2.0 * step_radius
-        is_staggered = True
-    else:
-        dx = dy = 2.0 * step_radius
-
-    return dx, dy, is_staggered
-
-
 def _generate_2d_tiles(target_shape, strategy, config: LatticeConfig):
     step_radius = config.tile_radius + config.gap
     u_min, u_max, v_min, v_max, offset_x, offset_y = strategy.setup_bounds(
         config.border_size, config.offset_x, config.offset_y)
 
-    dx, dy, is_staggered = _get_grid_dimensions(config.pattern, step_radius)
+    tile_generator = TileFactory.create(config.pattern)
+    dx, dy, is_staggered = tile_generator.get_grid_dimensions(step_radius)
 
     target_cols, rows, c_start, c_end, dx, dy, odd_y_offset = strategy.setup_grid(
         dx, dy, u_min, u_max, v_min, v_max, is_staggered)
 
-    tile_generator = TileFactory.create(config.pattern)
     pattern_faces = []
 
     for c in range(c_start, c_end):
