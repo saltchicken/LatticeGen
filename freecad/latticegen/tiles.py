@@ -1,6 +1,7 @@
 """Tile generation factory and classes for 2D patterns."""
 
 import math
+
 import Part
 
 
@@ -11,9 +12,7 @@ class BaseTile:
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        
-        # We skip registering any class that doesn't define a unique name 
-        # (like BaseTile or intermediate classes like BaseCircleTile)
+
         if cls.name != "Base":
             BaseTile._registry[cls.name] = cls
 
@@ -73,7 +72,7 @@ class SquareTile(BaseTile):
 class BaseCircleTile(BaseTile):
     """Shared creation logic for both circle types."""
     # Inherits name="Base", so it won't be added to the registry dropdown
-    
+
     @staticmethod
     def create_face(base_pos, norm, tan_u, tan_v, radius):
         circle_edge = Part.makeCircle(radius, base_pos, norm)
@@ -114,7 +113,9 @@ class KagomeTile(BaseTile):
             r = radius if i % 2 == 0 else inner_radius
             local_pts.append((r * math.cos(angle), r * math.sin(angle)))
 
-        test_pts_3d = [base_pos + tan_u * lx + tan_v * ly for lx, ly in local_pts]
+        test_pts_3d = [
+            base_pos + tan_u * lx + tan_v * ly for lx, ly in local_pts
+        ]
         test_pts_3d.append(test_pts_3d[0])
         face = Part.Face(Part.makePolygon(test_pts_3d))
         return face, test_pts_3d
