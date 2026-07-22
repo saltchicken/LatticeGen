@@ -25,6 +25,10 @@ class LatticeGenCommand:
                 "Error: Select a valid solid object first.\n")
             return
 
+        if len(selection) > 1:
+            App.Console.PrintError("Error: Please select only one target object.\n")
+            return
+
         target_obj = selection[0].Object
         target_face = None
 
