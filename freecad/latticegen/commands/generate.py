@@ -37,7 +37,13 @@ class LatticeGenCommand:
             target_face = target_obj.Shape.getElement(
                 selection[0].SubElementNames[0])
 
-        panel = PatternTaskPanel(target_obj, target_face)
+        if selection[0].HasSubObjects and "Face" in selection[0].SubElementNames[0]:
+            target_face_name = selection[0].SubElementNames[0]
+            target_face = target_obj.Shape.getElement(target_face_name)
+        else:
+            target_face_name = ""
+
+        panel = PatternTaskPanel(target_obj, target_face, target_face_name)
         Gui.Control.showDialog(panel)
 
     def IsActive(self):

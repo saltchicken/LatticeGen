@@ -3,67 +3,57 @@
 import FreeCAD as App
 
 from freecad.latticegen.config import LatticeConfig
-from freecad.latticegen.core import generate_lattice_shape
+from freecad.latticegen.feature import LatticeToolFeature, ViewProviderLatticeTool
 from freecad.latticegen.utils import get_active_body
 
 
-def inject_lattice_into_document(target_obj, target_face,
-                                 config: LatticeConfig):
-    """Handles all FreeCAD tree operations (PartDesign Body vs Part Root)."""
+def inject_lattice_into_document(target_obj, target_face, config: LatticeConfig, target_face_name: str = ""):
+    """Instantiates the parametric lattice feature into the document."""
     active_body = get_active_body(target_obj)
-    is_cut = config.operation_mode == "cut"
+    
+    op_suffix = "LatticeCut" if config.operation_mode == "cut" else "LatticePanel"
+    feat_name = f"{target_obj.Name}_{op_suffix}"
 
-    # PartDesign Workflow
+    # 1. Create the unified Parametric Lattice Feature
     if active_body:
-        tool_shape = generate_lattice_shape(target_obj,
-                                            config,
-                                            target_face,
-                                            return_tool=True)
-        if tool_shape is None:
-            return
-
-        tool_obj = App.ActiveDocument.addObject(
-            "Part::Feature", f"{target_obj.Name}_LatticeTools")
-        tool_obj.Shape = tool_shape
-        tool_obj.Visibility = False
-
-        operation_name = "LatticeCut" if is_cut else "LatticePanel"
-        bool_feat = active_body.newObject(
-            "PartDesign::Boolean", f"{target_obj.Name}_{operation_name}")
-        bool_feat.Type = 1 if is_cut else 2
-        bool_feat.Group = [tool_obj]
-
-        target_obj.Visibility = False
-        if bool_feat.ViewObject and target_obj.ViewObject:
-            bool_feat.ViewObject.ShapeColor = getattr(target_obj.ViewObject,
-                                                      "ShapeColor",
-                                                      (0.8, 0.8, 0.8))
-
-        App.ActiveDocument.recompute()
-
-    # Part Workbench Workflow (No active body)
+        feat_obj = App.ActiveDocument.addObject("PartDesign::FeaturePython", feat_name)
+        active_body.addObject(feat_obj)
+        active_body.Tip = feat_obj
     else:
-        shape = generate_lattice_shape(target_obj,
-                                       config,
-                                       target_face,
-                                       return_tool=False)
-        if shape is None:
-            return
+        feat_obj = App.ActiveDocument.addObject("Part::FeaturePython", feat_name)
 
-        operation_name = "Lattice" if is_cut else "Panels"
-        final_obj = App.ActiveDocument.addObject(
-            "Part::Feature", f"{target_obj.Name}_{operation_name}")
-        final_obj.Shape = shape
+    LatticeToolFeature(feat_obj)
+    if App.GuiUp:
+        ViewProviderLatticeTool(feat_obj.ViewObject)
 
-        target_obj.Visibility = False
-        if final_obj.ViewObject and target_obj.ViewObject:
-            final_obj.ViewObject.ShapeColor = getattr(target_obj.ViewObject,
-                                                      "ShapeColor",
-                                                      (0.8, 0.8, 0.8))
+    # 2. Map the UI config directly to the new parametric node
+    feat_obj.Target = target_obj
+    feat_obj.TargetFace = target_face_name
+    feat_obj.OperationMode = config.operation_mode
+    feat_obj.Pattern = config.pattern
+    feat_obj.Mapping = config.mapping
+    feat_obj.Axis = config.axis
+    feat_obj.TileRadius = config.tile_radius
+    feat_obj.Gap = config.gap
+    feat_obj.ExtrudeDepth = config.extrude_depth
+    feat_obj.FilletRadius = config.fillet_radius
+    feat_obj.BorderSize = config.border_size
+    feat_obj.OffsetX = config.offset_x
+    feat_obj.OffsetY = config.offset_y
+    feat_obj.InclusionThreshold = config.inclusion_threshold
 
+    # Hide the original target object to simulate PartDesign's "Tip" visual flow
+    target_obj.Visibility = False
+    
+    # Inherit color from the target object
+    if feat_obj.ViewObject and target_obj.ViewObject:
+        feat_obj.ViewObject.ShapeColor = getattr(target_obj.ViewObject, "ShapeColor", (0.8, 0.8, 0.8))
+
+    # 3. For Part Workbench, optionally place it in a group for cleanliness
+    if not active_body:
         group_name = "Generated_Lattices"
-        group = App.ActiveDocument.getObject(
-            group_name) or App.ActiveDocument.addObject(
-                "App::DocumentObjectGroup", group_name)
+        group = App.ActiveDocument.getObject(group_name) or App.ActiveDocument.addObject("App::DocumentObjectGroup", group_name)
         group.Label = "Generated Lattices"
-        group.addObject(final_obj)
+        group.addObject(feat_obj)
+
+    App.ActiveDocument.recompute()

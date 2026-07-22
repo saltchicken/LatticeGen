@@ -15,9 +15,10 @@ from freecad.latticegen.ui.base_panel import BaseTaskPanel
 class PatternTaskPanel(BaseTaskPanel):
     """Task panel for setting pattern parameters and generating geometry."""
 
-    def __init__(self, target_obj, target_face=None):
+    def __init__(self, target_obj, target_face=None, target_face_name=""):
         self.target_obj = target_obj
         self.target_face = target_face
+        self.target_face_name = target_face_name
 
         ui_path = Resources._pkg.joinpath("ui/lattice_panel.ui")
         super().__init__(str(ui_path), has_preview=True)
@@ -100,7 +101,7 @@ class PatternTaskPanel(BaseTaskPanel):
         """Passes the hydrated config and target info to the workflow logic module."""
         config = self.get_config_from_ui()
         workflow.inject_lattice_into_document(self.target_obj, self.target_face,
-                                              config)
+                                              config, self.target_face_name)
 
     def reject(self):
         super().reject()
