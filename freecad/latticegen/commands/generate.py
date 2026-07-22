@@ -11,7 +11,7 @@ class LatticeGenCommand:
         return {
             "Pixmap": Resources.icon("LatticeGen.svg"),
             "MenuText": "Generate Lattice",
-            "ToolTip": "Launch the LatticeGen task panel"
+            "ToolTip": "Generate lattice of shapes over a range"
         }
 
     def Activated(self):
