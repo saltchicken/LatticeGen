@@ -75,8 +75,8 @@ def _build_3d_pillars(pattern_faces, strategy, target_shape,
                                                  edges_to_fillet)
                     if not filleted.isNull():
                         pillar = filleted
-                except Exception:
-                    pass
+                except Part.OCCError as e:
+                    App.Console.PrintWarning(f"Fillet failed on a pillar: {e}\n")
 
         if clipping_volume:
             try:
@@ -85,8 +85,8 @@ def _build_3d_pillars(pattern_faces, strategy, target_shape,
                     pillar = clipped
                 else:
                     continue
-            except Exception:
-                pass
+            except Part.OCCError as e:
+                App.Console.PrintWarning(f"Clipping failed on a pillar: {e}\n")
 
         pillar_solids.append(pillar)
 
