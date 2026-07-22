@@ -4,18 +4,18 @@ import math
 import Part
 
 
-# Global registry for automatic UI and Factory population
-PATTERN_REGISTRY = {}
-
-
 class BaseTile:
-    """Base class that automatically registers new patterns."""
+    """Base class that automatically registers new patterns into its own encapsulated registry."""
     name = "Base"
+    _registry = {}  # Class attribute replaces the global variable
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
+        
+        # We skip registering any class that doesn't define a unique name 
+        # (like BaseTile or intermediate classes like BaseCircleTile)
         if cls.name != "Base":
-            PATTERN_REGISTRY[cls.name] = cls
+            BaseTile._registry[cls.name] = cls
 
     @classmethod
     def get_grid_dimensions(cls, step_radius: float):
@@ -72,6 +72,8 @@ class SquareTile(BaseTile):
 
 class BaseCircleTile(BaseTile):
     """Shared creation logic for both circle types."""
+    # Inherits name="Base", so it won't be added to the registry dropdown
+    
     @staticmethod
     def create_face(base_pos, norm, tan_u, tan_v, radius):
         circle_edge = Part.makeCircle(radius, base_pos, norm)
@@ -123,8 +125,10 @@ class TileFactory:
 
     @staticmethod
     def create(pattern: str):
-        return PATTERN_REGISTRY.get(pattern, HexagonTile)
+        # Fetch from the encapsulated class attribute
+        return BaseTile._registry.get(pattern, HexagonTile)
 
     @staticmethod
     def get_available_patterns() -> list:
-        return list(PATTERN_REGISTRY.keys())
+        # Fetch keys from the encapsulated class attribute
+        return list(BaseTile._registry.keys())
