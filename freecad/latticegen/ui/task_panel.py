@@ -103,5 +103,4 @@ class PatternTaskPanel(BaseTaskPanel):
                                               config)
 
     def reject(self):
-        self.target_obj.Visibility = True
         super().reject()
