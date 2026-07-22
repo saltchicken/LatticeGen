@@ -1,7 +1,6 @@
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from freecad.latticegen.resources import Resources
 from freecad.latticegen.ui.task_panel import PatternTaskPanel
 
 
@@ -10,7 +9,7 @@ class LatticeGenCommand:
 
     def GetResources(self):
         return {
-            "Pixmap": Resources.icon("LatticeGen.svg"),
+            "Pixmap": "LatticeGen",
             "MenuText": "Generate Lattice",
             "ToolTip": "Generate lattice of shapes over a range"
         }
@@ -30,18 +29,13 @@ class LatticeGenCommand:
             return
 
         target_obj = selection[0].Object
+        
+        target_face_name = ""
         target_face = None
-
-        if selection[0].HasSubObjects and "Face" in selection[
-                0].SubElementNames[0]:
-            target_face = target_obj.Shape.getElement(
-                selection[0].SubElementNames[0])
 
         if selection[0].HasSubObjects and "Face" in selection[0].SubElementNames[0]:
             target_face_name = selection[0].SubElementNames[0]
             target_face = target_obj.Shape.getElement(target_face_name)
-        else:
-            target_face_name = ""
 
         panel = PatternTaskPanel(target_obj, target_face, target_face_name)
         Gui.Control.showDialog(panel)
