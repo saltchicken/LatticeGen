@@ -15,7 +15,8 @@ from freecad.latticegen.tiles import TileFactory
 
 def _get_grid_dimensions(pattern: str, step_radius: float):
     is_staggered = False
-    if pattern == "Hexagon":
+
+    if pattern in ["Hexagon", "Kagome (Hexagram)"]:
         dx = 1.5 * step_radius
         dy = math.sqrt(3) * step_radius
         is_staggered = True
@@ -27,6 +28,7 @@ def _get_grid_dimensions(pattern: str, step_radius: float):
         is_staggered = True
     else:
         dx = dy = 2.0 * step_radius
+
     return dx, dy, is_staggered
 
 
