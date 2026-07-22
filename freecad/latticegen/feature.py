@@ -106,6 +106,14 @@ class ViewProviderLatticeTool:
         self.ViewObject = vobj
         self.Object = vobj.Object
 
+    def __getstate__(self):
+        """Called during save. Return None to prevent serializing C++ objects."""
+        return None
+
+    def __setstate__(self, state):
+        """Called during document restore."""
+        return None
+
     def getIcon(self):
         return Resources.icon("LatticeGen.svg")
 
