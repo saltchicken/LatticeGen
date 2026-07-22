@@ -17,6 +17,8 @@ from freecad.latticegen.utils import calculate_projected_normal
 
 class PlanarStrategy(BaseMappingStrategy):
     """Direct planar projection on the XY plane."""
+    
+    name = "Planar"
 
     def setup_bounds(self, border_size: float, offset_x: float,
                      offset_y: float):
@@ -111,6 +113,8 @@ class PlanarStrategy(BaseMappingStrategy):
 
 class ProjectedPlanarStrategy(PlanarStrategy):
     """Raycast projection onto target surface along Z axis."""
+    
+    name = "Projected Planar"
 
     def get_mapping(self, u: float, v: float):
         p_top = App.Vector(u, v, self.bbox.ZMax + self.max_dim)

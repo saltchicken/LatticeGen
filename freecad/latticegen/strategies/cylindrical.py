@@ -14,6 +14,8 @@ from freecad.latticegen.utils import calculate_projected_normal
 
 class CylindricalStrategy(WrapStrategy):
     """Simple cylindrical projection wrapped around Z axis."""
+    
+    name = "Cylindrical"
 
     def setup_bounds(self, border_size: float, offset_x: float,
                      offset_y: float):
@@ -33,6 +35,8 @@ class CylindricalStrategy(WrapStrategy):
 
 class ProjectedCylindricalStretchedStrategy(WrapStrategy):
     """Raycast cylindrical projection with dynamic stretching."""
+    
+    name = "Projected Cylindrical (Stretched)"
 
     def setup_bounds(self, border_size: float, offset_x: float,
                      offset_y: float):
@@ -74,6 +78,8 @@ class ProjectedCylindricalStretchedStrategy(WrapStrategy):
 
 class ProjectedCylindricalUniformStrategy(WrapStrategy):
     """Raycast cylindrical projection with uniform cell scaling."""
+    
+    name = "Projected Cylindrical (Uniform)"
 
     def __init__(self, target_shape, bbox, target_face=None):
         super().__init__(target_shape, bbox, target_face)

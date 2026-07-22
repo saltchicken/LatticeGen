@@ -9,6 +9,8 @@ from freecad.latticegen.strategies.base import BaseMappingStrategy
 
 class SurfaceUVStrategy(BaseMappingStrategy):
     """Direct mapping using face UV parametric domain."""
+    
+    name = "Surface UV"
 
     def setup_bounds(self, border_size: float, offset_x: float,
                      offset_y: float):

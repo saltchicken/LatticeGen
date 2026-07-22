@@ -7,6 +7,7 @@ from freecad.latticegen.config import LatticeConfig
 from freecad.latticegen.constants import PREVIEW_TRANSPARENCY
 from freecad.latticegen.core import generate_lattice_shape
 from freecad.latticegen.resources import Resources
+from freecad.latticegen.strategies import MappingFactory
 from freecad.latticegen.tiles import TileFactory
 from freecad.latticegen.ui.base_panel import BaseTaskPanel
 
@@ -24,6 +25,9 @@ class PatternTaskPanel(BaseTaskPanel):
     def setup_ui(self):
         self.form.pattern_combo.clear()
         self.form.pattern_combo.addItems(TileFactory.get_available_patterns())
+        
+        self.form.mapping_combo.clear()
+        self.form.mapping_combo.addItems(MappingFactory.get_available_mappings())
 
         self.form.pattern_combo.currentIndexChanged.connect(self.queue_preview)
         self.form.mapping_combo.currentIndexChanged.connect(self.queue_preview)

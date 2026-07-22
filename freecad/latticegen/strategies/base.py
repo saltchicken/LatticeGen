@@ -17,6 +17,14 @@ from freecad.latticegen.constants import TOL_STRICT
 class BaseMappingStrategy:
     """Abstract base class for target surface UV mapping strategies."""
 
+    name = "Base"
+    _registry = {}
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if cls.name != "Base":
+            BaseMappingStrategy._registry[cls.name] = cls
+
     def __init__(self, target_shape, bbox, target_face=None):
         self.target_shape = target_shape
         self.bbox = bbox
@@ -65,6 +73,8 @@ class BaseMappingStrategy:
 
 class WrapStrategy(BaseMappingStrategy):
     """Base strategy for cylindrical and spherical wrap mappings."""
+    
+    name = "Base"
 
     def __init__(self, target_shape, bbox, target_face=None):
         super().__init__(target_shape, bbox, target_face)
