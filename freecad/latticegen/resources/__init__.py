@@ -4,6 +4,7 @@ from typing import ClassVar
 
 import FreeCAD as App
 
+
 class Resources:
     """Addon LatticeGen resource manager"""
 
@@ -24,7 +25,8 @@ class Resources:
     @classmethod
     def gui_register_icons(cls) -> bool:
         if not App.GuiUp:
-            raise RuntimeError(f"{__name__}: Icon path cannot be added without Gui.")
+            raise RuntimeError(
+                f"{__name__}: Icon path cannot be added without Gui.")
 
         if cls._gui_icons_added:
             return False

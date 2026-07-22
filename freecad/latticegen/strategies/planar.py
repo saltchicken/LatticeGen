@@ -4,15 +4,13 @@ import DraftGeomUtils
 import FreeCAD as App
 import Part
 
-from freecad.latticegen.constants import (
-    BOOL_OVERSHOOT,
-    BOOL_OVERSHOOT_LARGE,
-    BOUNDS_PADDING,
-    PERCENT_MAX,
-    PERCENT_SCALE,
-    TOL_RELAXED,
-    TOL_STRICT,
-)
+from freecad.latticegen.constants import BOOL_OVERSHOOT
+from freecad.latticegen.constants import BOOL_OVERSHOOT_LARGE
+from freecad.latticegen.constants import BOUNDS_PADDING
+from freecad.latticegen.constants import PERCENT_MAX
+from freecad.latticegen.constants import PERCENT_SCALE
+from freecad.latticegen.constants import TOL_RELAXED
+from freecad.latticegen.constants import TOL_STRICT
 from freecad.latticegen.strategies.base import BaseMappingStrategy
 from freecad.latticegen.utils import calculate_projected_normal
 
@@ -20,7 +18,8 @@ from freecad.latticegen.utils import calculate_projected_normal
 class PlanarStrategy(BaseMappingStrategy):
     """Direct planar projection on the XY plane."""
 
-    def setup_bounds(self, border_size: float, offset_x: float, offset_y: float):
+    def setup_bounds(self, border_size: float, offset_x: float,
+                     offset_y: float):
         return self.bbox.XMin, self.bbox.XMax, self.bbox.YMin, self.bbox.YMax, offset_x, offset_y
 
     def get_mapping(self, u: float, v: float):
@@ -33,7 +32,8 @@ class PlanarStrategy(BaseMappingStrategy):
     def get_base_pos(self, pos: App.Vector, norm: App.Vector) -> App.Vector:
         return pos
 
-    def get_extrude_vector(self, norm: App.Vector, extrude_depth: float, z_height: float) -> App.Vector:
+    def get_extrude_vector(self, norm: App.Vector, extrude_depth: float,
+                           z_height: float) -> App.Vector:
         return App.Vector(0, 0, z_height)
 
     def get_clipping_shape(self, border_size: float):
@@ -45,7 +45,8 @@ class PlanarStrategy(BaseMappingStrategy):
             z_mid = (self.bbox.ZMax + self.bbox.ZMin) / 2.0
             plane_dx = (self.bbox.XMax - self.bbox.XMin) + (BOUNDS_PADDING * 2)
             plane_dy = (self.bbox.YMax - self.bbox.YMin) + (BOUNDS_PADDING * 2)
-            plane_pos = App.Vector(self.bbox.XMin - BOUNDS_PADDING, self.bbox.YMin - BOUNDS_PADDING, z_mid)
+            plane_pos = App.Vector(self.bbox.XMin - BOUNDS_PADDING,
+                                   self.bbox.YMin - BOUNDS_PADDING, z_mid)
             plane_norm = App.Vector(0, 0, 1)
 
             plane = Part.makePlane(plane_dx, plane_dy, plane_pos, plane_norm)
@@ -75,7 +76,8 @@ class PlanarStrategy(BaseMappingStrategy):
                 z_offset = self.bbox.ZMin - BOOL_OVERSHOOT - current_z
                 offset_shape.translate(App.Vector(0, 0, z_offset))
 
-                extrude_z = self.bbox.ZMax + BOOL_OVERSHOOT_LARGE - (self.bbox.ZMin - BOOL_OVERSHOOT)
+                extrude_z = self.bbox.ZMax + BOOL_OVERSHOOT_LARGE - (
+                    self.bbox.ZMin - BOOL_OVERSHOOT)
                 return offset_shape.extrude(App.Vector(0, 0, extrude_z))
         except Exception:
             pass
@@ -92,11 +94,9 @@ class PlanarStrategy(BaseMappingStrategy):
             line = Part.makeLine(line_start, line_end)
             return line.distToShape(self.target_shape)[0] <= TOL_RELAXED
 
-        pts_to_check = (
-            test_pts[:-1]
-            if (len(test_pts) > 1 and test_pts[0].isEqual(test_pts[-1], TOL_STRICT))
-            else test_pts
-        )
+        pts_to_check = (test_pts[:-1] if
+                        (len(test_pts) > 1 and test_pts[0].isEqual(
+                            test_pts[-1], TOL_STRICT)) else test_pts)
 
         if not pts_to_check:
             return False
@@ -105,7 +105,8 @@ class PlanarStrategy(BaseMappingStrategy):
             return all(is_inside(pt.x, pt.y) for pt in pts_to_check)
 
         inside_count = sum(1 for p in pts_to_check if is_inside(p.x, p.y))
-        return (inside_count / len(pts_to_check)) >= (inclusion_threshold / PERCENT_SCALE)
+        return (inside_count / len(pts_to_check)) >= (inclusion_threshold /
+                                                      PERCENT_SCALE)
 
 
 class ProjectedPlanarStrategy(PlanarStrategy):
@@ -124,7 +125,8 @@ class ProjectedPlanarStrategy(PlanarStrategy):
         else:
             pos = App.Vector(u, v, self.bbox.ZMax)
 
-        norm = calculate_projected_normal(self.target_shape, pos, App.Vector(0, 0, 1), hit_shape)
+        norm = calculate_projected_normal(self.target_shape, pos,
+                                          App.Vector(0, 0, 1), hit_shape)
 
         tan_u = App.Vector(0, 1, 0).cross(norm)
         if tan_u.Length < TOL_RELAXED:
@@ -135,5 +137,6 @@ class ProjectedPlanarStrategy(PlanarStrategy):
 
         return pos, norm, tan_u, tan_v
 
-    def get_extrude_vector(self, norm: App.Vector, extrude_depth: float, z_height: float) -> App.Vector:
+    def get_extrude_vector(self, norm: App.Vector, extrude_depth: float,
+                           z_height: float) -> App.Vector:
         return -norm * (extrude_depth + BOOL_OVERSHOOT_LARGE)

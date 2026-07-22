@@ -2,7 +2,8 @@
 
 import FreeCAD as App
 import FreeCADGui as Gui
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore
+from PySide6 import QtWidgets
 
 from freecad.latticegen.constants import PREVIEW_DELAY_MS
 
@@ -21,7 +22,8 @@ class BaseTaskPanel:
             self.preview_timer.timeout.connect(self._trigger_preview)
 
             App.ActiveDocument.openTransaction("Preview Transaction")
-            self.preview_obj = App.ActiveDocument.addObject("Part::Feature", "PreviewObject")
+            self.preview_obj = App.ActiveDocument.addObject(
+                "Part::Feature", "PreviewObject")
 
         self.setup_ui()
 
@@ -51,7 +53,8 @@ class BaseTaskPanel:
         pass
 
     def getStandardButtons(self):
-        return (QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel).value
+        return (QtWidgets.QDialogButtonBox.Ok |
+                QtWidgets.QDialogButtonBox.Cancel).value
 
     def accept(self):
         if self.has_preview:

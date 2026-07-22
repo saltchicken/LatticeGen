@@ -2,12 +2,12 @@
 
 import FreeCAD as App
 
-from freecad.latticegen.constants import PREVIEW_TRANSPARENCY
-from freecad.latticegen.config import LatticeConfig
-from freecad.latticegen.core import generate_lattice_shape
-from freecad.latticegen.ui.base_panel import BaseTaskPanel
 from freecad.latticegen import workflow
+from freecad.latticegen.config import LatticeConfig
+from freecad.latticegen.constants import PREVIEW_TRANSPARENCY
+from freecad.latticegen.core import generate_lattice_shape
 from freecad.latticegen.resources import Resources
+from freecad.latticegen.ui.base_panel import BaseTaskPanel
 
 
 class PatternTaskPanel(BaseTaskPanel):
@@ -31,14 +31,17 @@ class PatternTaskPanel(BaseTaskPanel):
         self.form.threshold_spin.valueChanged.connect(self.queue_preview)
         self.form.offset_x_spin.valueChanged.connect(self.queue_preview)
         self.form.offset_y_spin.valueChanged.connect(self.queue_preview)
-        self.form.operation_combo.currentIndexChanged.connect(self.queue_preview)
+        self.form.operation_combo.currentIndexChanged.connect(
+            self.queue_preview)
 
         if hasattr(self.form, "preview_toggle_check"):
-            self.form.preview_toggle_check.stateChanged.connect(self.queue_preview)
+            self.form.preview_toggle_check.stateChanged.connect(
+                self.queue_preview)
 
     def get_config_from_ui(self) -> LatticeConfig:
         """Hydrates a configuration object from current UI widget states."""
-        mode = "cut" if self.form.operation_combo.currentIndex() == 0 else "common"
+        mode = "cut" if self.form.operation_combo.currentIndex(
+        ) == 0 else "common"
         return LatticeConfig(
             pattern=self.form.pattern_combo.currentText(),
             mapping=self.form.mapping_combo.currentText(),
@@ -63,23 +66,22 @@ class PatternTaskPanel(BaseTaskPanel):
 
     def calculate_preview(self):
         config = self.get_config_from_ui()
-        show_final = (
-            hasattr(self.form, "preview_toggle_check") and self.form.preview_toggle_check.isChecked()
-        )
+        show_final = (hasattr(self.form, "preview_toggle_check") and
+                      self.form.preview_toggle_check.isChecked())
 
         if show_final:
             self.target_obj.Visibility = False
-            if self.has_preview and hasattr(self, "preview_obj") and self.preview_obj.ViewObject:
+            if self.has_preview and hasattr(
+                    self, "preview_obj") and self.preview_obj.ViewObject:
                 self.preview_obj.ViewObject.ShapeColor = getattr(
-                    self.target_obj.ViewObject, "ShapeColor", (0.8, 0.8, 0.8)
-                )
+                    self.target_obj.ViewObject, "ShapeColor", (0.8, 0.8, 0.8))
                 self.preview_obj.ViewObject.Transparency = getattr(
-                    self.target_obj.ViewObject, "Transparency", 0
-                )
+                    self.target_obj.ViewObject, "Transparency", 0)
             return self.get_shape(config, return_tool=False)
         else:
             self.target_obj.Visibility = True
-            if self.has_preview and hasattr(self, "preview_obj") and self.preview_obj.ViewObject:
+            if self.has_preview and hasattr(
+                    self, "preview_obj") and self.preview_obj.ViewObject:
                 self.preview_obj.ViewObject.ShapeColor = (1.0, 0.0, 0.0)
                 self.preview_obj.ViewObject.Transparency = PREVIEW_TRANSPARENCY
             return self.get_shape(config, return_tool=True)
@@ -87,7 +89,8 @@ class PatternTaskPanel(BaseTaskPanel):
     def generate_final(self):
         """Passes the hydrated config and target info to the workflow logic module."""
         config = self.get_config_from_ui()
-        workflow.inject_lattice_into_document(self.target_obj, self.target_face, config)
+        workflow.inject_lattice_into_document(self.target_obj, self.target_face,
+                                              config)
 
     def reject(self):
         self.target_obj.Visibility = True

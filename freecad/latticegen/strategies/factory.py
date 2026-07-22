@@ -1,12 +1,13 @@
 """Factory for instantiating mapping strategies."""
 
-from freecad.latticegen.strategies.cylindrical import (
-    CylindricalStrategy,
-    ProjectedCylindricalStretchedStrategy,
-    ProjectedCylindricalUniformStrategy,
-)
-from freecad.latticegen.strategies.planar import PlanarStrategy, ProjectedPlanarStrategy
-from freecad.latticegen.strategies.spherical import RadialStrategy, ProjectedSphericalStrategy, SphericalStrategy
+from freecad.latticegen.strategies.cylindrical import CylindricalStrategy
+from freecad.latticegen.strategies.cylindrical import ProjectedCylindricalStretchedStrategy
+from freecad.latticegen.strategies.cylindrical import ProjectedCylindricalUniformStrategy
+from freecad.latticegen.strategies.planar import PlanarStrategy
+from freecad.latticegen.strategies.planar import ProjectedPlanarStrategy
+from freecad.latticegen.strategies.spherical import ProjectedSphericalStrategy
+from freecad.latticegen.strategies.spherical import RadialStrategy
+from freecad.latticegen.strategies.spherical import SphericalStrategy
 from freecad.latticegen.strategies.surface import SurfaceUVStrategy
 
 
@@ -14,15 +15,24 @@ class MappingFactory:
     """Instantiates strategy handlers based on string selection."""
 
     STRATEGIES = {
-        "Planar": PlanarStrategy,
-        "Projected Planar": ProjectedPlanarStrategy,
-        "Cylindrical": CylindricalStrategy,
-        "Projected Cylindrical (Uniform)": ProjectedCylindricalUniformStrategy,
-        "Projected Cylindrical (Stretched)": ProjectedCylindricalStretchedStrategy,
-        "Spherical": SphericalStrategy,
-        "Projected Spherical": ProjectedSphericalStrategy,
-        "Radial": RadialStrategy,
-        "Surface UV": SurfaceUVStrategy,
+        "Planar":
+            PlanarStrategy,
+        "Projected Planar":
+            ProjectedPlanarStrategy,
+        "Cylindrical":
+            CylindricalStrategy,
+        "Projected Cylindrical (Uniform)":
+            ProjectedCylindricalUniformStrategy,
+        "Projected Cylindrical (Stretched)":
+            ProjectedCylindricalStretchedStrategy,
+        "Spherical":
+            SphericalStrategy,
+        "Projected Spherical":
+            ProjectedSphericalStrategy,
+        "Radial":
+            RadialStrategy,
+        "Surface UV":
+            SurfaceUVStrategy,
     }
 
     @classmethod

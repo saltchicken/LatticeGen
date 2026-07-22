@@ -2,14 +2,16 @@
 
 import FreeCAD as App
 
-from freecad.latticegen.constants import PERCENT_SCALE, TOL_RELAXED
+from freecad.latticegen.constants import PERCENT_SCALE
+from freecad.latticegen.constants import TOL_RELAXED
 from freecad.latticegen.strategies.base import BaseMappingStrategy
 
 
 class SurfaceUVStrategy(BaseMappingStrategy):
     """Direct mapping using face UV parametric domain."""
 
-    def setup_bounds(self, border_size: float, offset_x: float, offset_y: float):
+    def setup_bounds(self, border_size: float, offset_x: float,
+                     offset_y: float):
         if not self.target_face:
             return 0, 0, 0, 0, offset_x, offset_y
 
@@ -17,8 +19,10 @@ class SurfaceUVStrategy(BaseMappingStrategy):
 
         if border_size > 0.0:
             mid_u, mid_v = (u_min + u_max) / 2.0, (v_min + v_max) / 2.0
-            len_u = (self.target_face.valueAt(u_max, mid_v) - self.target_face.valueAt(u_min, mid_v)).Length
-            len_v = (self.target_face.valueAt(mid_u, v_max) - self.target_face.valueAt(mid_u, v_min)).Length
+            len_u = (self.target_face.valueAt(u_max, mid_v) -
+                     self.target_face.valueAt(u_min, mid_v)).Length
+            len_v = (self.target_face.valueAt(mid_u, v_max) -
+                     self.target_face.valueAt(mid_u, v_min)).Length
 
             scale_u = (u_max - u_min) / len_u if len_u > TOL_RELAXED else 0
             scale_v = (v_max - v_min) / len_v if len_v > TOL_RELAXED else 0
@@ -45,10 +49,12 @@ class SurfaceUVStrategy(BaseMappingStrategy):
         tan_u.normalize()
         return pos, norm, tan_u, norm.cross(tan_u).normalize()
 
-    def is_valid_uv(self, u: float, v: float, u_min: float, u_max: float, v_min: float, v_max: float) -> bool:
+    def is_valid_uv(self, u: float, v: float, u_min: float, u_max: float,
+                    v_min: float, v_max: float) -> bool:
         return (u_min <= u <= u_max) and (v_min <= v <= v_max)
 
-    def setup_grid(self, dx: float, dy: float, u_min: float, u_max: float, v_min: float, v_max: float, is_staggered: bool):
+    def setup_grid(self, dx: float, dy: float, u_min: float, u_max: float,
+                   v_min: float, v_max: float, is_staggered: bool):
         dx = (dx / self.max_dim) * (u_max - u_min)
         dy = (dy / self.max_dim) * (v_max - v_min)
         odd_y_offset = dy / 2.0 if is_staggered else 0.0

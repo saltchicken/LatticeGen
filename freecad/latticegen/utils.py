@@ -4,7 +4,9 @@ import FreeCAD as App
 import FreeCADGui as Gui
 import Part
 
-from freecad.latticegen.constants import NORMAL_DOT_MIN, RAY_OFFSET, TOL_STRICT
+from freecad.latticegen.constants import NORMAL_DOT_MIN
+from freecad.latticegen.constants import RAY_OFFSET
+from freecad.latticegen.constants import TOL_STRICT
 
 
 def get_active_body(base_obj=None):
@@ -21,12 +23,16 @@ def get_active_body(base_obj=None):
                 break
 
     if not active_body:
-        App.Console.PrintWarning("Warning: No Active Body found. Placing objects in root.\n")
+        App.Console.PrintWarning(
+            "Warning: No Active Body found. Placing objects in root.\n")
 
     return active_body
 
 
-def calculate_projected_normal(target_shape, pos: App.Vector, ray_dir: App.Vector, hit_shape: bool = True) -> App.Vector:
+def calculate_projected_normal(target_shape,
+                               pos: App.Vector,
+                               ray_dir: App.Vector,
+                               hit_shape: bool = True) -> App.Vector:
     """Calculates surface normal at a given point using ray projection."""
     if not hit_shape:
         return ray_dir
