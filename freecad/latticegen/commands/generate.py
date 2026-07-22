@@ -29,7 +29,7 @@ class LatticeGenCommand:
             return
 
         target_obj = selection[0].Object
-        
+
         target_face_name = ""
         target_face = None
 
