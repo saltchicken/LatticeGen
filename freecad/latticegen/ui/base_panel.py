@@ -42,7 +42,7 @@ class BaseTaskPanel:
             shape = self.calculate_preview()
             if shape and not shape.isNull():
                 self.preview_obj.Shape = shape
-                App.ActiveDocument.recompute()
+                self.preview_obj.recompute()
         except Exception as e:
             App.Console.PrintWarning(f"Preview calculation error: {e}\n")
 
