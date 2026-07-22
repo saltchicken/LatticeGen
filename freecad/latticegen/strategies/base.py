@@ -25,22 +25,55 @@ class BaseMappingStrategy:
         if cls.name != "Base":
             BaseMappingStrategy._registry[cls.name] = cls
 
-    def __init__(self, target_shape, bbox, target_face=None):
+    def __init__(self, target_shape, bbox, target_face=None, axis="Z"):
         self.target_shape = target_shape
         self.bbox = bbox
         self.target_face = target_face
+        self.axis = axis
+
+        # Global centers
         self.Cx = (bbox.XMax + bbox.XMin) / 2.0
         self.Cy = (bbox.YMax + bbox.YMin) / 2.0
         self.Cz = (bbox.ZMax + bbox.ZMin) / 2.0
+
+        # Local coordinate mapping based on chosen axis
+        # (a, b) represent the cross section plane, c represents the primary extrusion/cylinder axis
+        if axis == "X":
+            self.local_C_a, self.local_C_b, self.local_C_c = self.Cy, self.Cz, self.Cx
+            self.a_min, self.a_max = bbox.YMin, bbox.YMax
+            self.b_min, self.b_max = bbox.ZMin, bbox.ZMax
+            self.c_min, self.c_max = bbox.XMin, bbox.XMax
+        elif axis == "Y":
+            self.local_C_a, self.local_C_b, self.local_C_c = self.Cz, self.Cx, self.Cy
+            self.a_min, self.a_max = bbox.ZMin, bbox.ZMax
+            self.b_min, self.b_max = bbox.XMin, bbox.XMax
+            self.c_min, self.c_max = bbox.YMin, bbox.YMax
+        else:
+            self.local_C_a, self.local_C_b, self.local_C_c = self.Cx, self.Cy, self.Cz
+            self.a_min, self.a_max = bbox.XMin, bbox.XMax
+            self.b_min, self.b_max = bbox.YMin, bbox.YMax
+            self.c_min, self.c_max = bbox.ZMin, bbox.ZMax
+
         self.max_dim = max(
             bbox.XMax - bbox.XMin,
             bbox.YMax - bbox.YMin,
             bbox.ZMax - bbox.ZMin,
         )
-        self.R = max(bbox.XMax - bbox.XMin, bbox.YMax - bbox.YMin) / 2.0
+        self.R = max(self.a_max - self.a_min, self.b_max - self.b_min) / 2.0
 
-    def setup_bounds(self, border_size: float, offset_x: float,
-                     offset_y: float):
+    def to_global(self, a: float, b: float, c: float) -> App.Vector:
+        """Translates local (a,b,c) parameters to a global App.Vector based on primary axis."""
+        if self.axis == "X": return App.Vector(c, a, b)
+        if self.axis == "Y": return App.Vector(b, c, a)
+        return App.Vector(a, b, c)
+
+    def get_c_val(self, pt: App.Vector) -> float:
+        """Gets the coordinate value of a vector along the primary axis."""
+        if self.axis == "X": return pt.x
+        if self.axis == "Y": return pt.y
+        return pt.z
+
+    def setup_bounds(self, border_size: float, offset_x: float, offset_y: float):
         raise NotImplementedError
 
     def get_mapping(self, u: float, v: float):
@@ -73,23 +106,27 @@ class BaseMappingStrategy:
 
 class WrapStrategy(BaseMappingStrategy):
     """Base strategy for cylindrical and spherical wrap mappings."""
-    
     name = "Base"
 
-    def __init__(self, target_shape, bbox, target_face=None):
-        super().__init__(target_shape, bbox, target_face)
+    def __init__(self, target_shape, bbox, target_face=None, axis="Z"):
+        super().__init__(target_shape, bbox, target_face, axis=axis)
         self.wrap_scale = 1.0
 
     def get_clipping_shape(self, border_size: float):
         safe_size = self.max_dim * 2.0 + BOUNDS_PADDING
         if border_size > 0.0:
-            z_min = self.bbox.ZMin + border_size
-            z_max = self.bbox.ZMax - border_size
-            if z_max > z_min:
-                safe_box = Part.makeBox(safe_size, safe_size, z_max - z_min)
-                box_pos = App.Vector(self.Cx - safe_size / 2.0,
-                                     self.Cy - safe_size / 2.0, z_min)
-                safe_box.translate(box_pos)
+            c_min = self.c_min + border_size
+            c_max = self.c_max - border_size
+            if c_max > c_min:
+                if self.axis == "X":
+                    safe_box = Part.makeBox(c_max - c_min, safe_size, safe_size)
+                    safe_box.translate(App.Vector(c_min, self.Cy - safe_size / 2.0, self.Cz - safe_size / 2.0))
+                elif self.axis == "Y":
+                    safe_box = Part.makeBox(safe_size, c_max - c_min, safe_size)
+                    safe_box.translate(App.Vector(self.Cx - safe_size / 2.0, c_min, self.Cz - safe_size / 2.0))
+                else:
+                    safe_box = Part.makeBox(safe_size, safe_size, c_max - c_min)
+                    safe_box.translate(App.Vector(self.Cx - safe_size / 2.0, self.Cy - safe_size / 2.0, c_min))
                 return safe_box
         return None
 
@@ -97,7 +134,6 @@ class WrapStrategy(BaseMappingStrategy):
         if inclusion_threshold <= 0.0:
             return True
 
-        z_min_orig, z_max_orig = self.bbox.ZMin, self.bbox.ZMax
         pts_to_check = (test_pts[:-1] if
                         (len(test_pts) > 1 and test_pts[0].isEqual(
                             test_pts[-1], TOL_STRICT)) else test_pts)
@@ -105,16 +141,14 @@ class WrapStrategy(BaseMappingStrategy):
         if not pts_to_check:
             return False
 
-        if inclusion_threshold >= PERCENT_MAX:
-            return all(
-                z_min_orig - TOL_RELAXED <= pt.z <= z_max_orig + TOL_RELAXED
-                for pt in pts_to_check)
+        def is_inside(pt):
+            return self.c_min - TOL_RELAXED <= self.get_c_val(pt) <= self.c_max + TOL_RELAXED
 
-        inside_count = sum(
-            1 for p in pts_to_check
-            if z_min_orig - TOL_RELAXED <= p.z <= z_max_orig + TOL_RELAXED)
-        return (inside_count / len(pts_to_check)) >= (inclusion_threshold /
-                                                      PERCENT_SCALE)
+        if inclusion_threshold >= PERCENT_MAX:
+            return all(is_inside(pt) for pt in pts_to_check)
+
+        inside_count = sum(1 for pt in pts_to_check if is_inside(pt))
+        return (inside_count / len(pts_to_check)) >= (inclusion_threshold / PERCENT_SCALE)
 
     def setup_grid(self, dx: float, dy: float, u_min: float, u_max: float,
                    v_min: float, v_max: float, is_staggered: bool):

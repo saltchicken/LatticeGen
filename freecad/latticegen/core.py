@@ -105,7 +105,7 @@ def generate_lattice_shape(target_obj,
                            return_tool=False):
     """Calculates and returns the resulting FreeCAD Shape of a patterned lattice."""
     target_shape = target_obj.Shape
-    strategy = MappingFactory.create(config.mapping, target_shape, target_face)
+    strategy = MappingFactory.create(config.mapping, target_shape, target_face, config.axis)
 
     # 1. Generate the 2D base profiles mapped to the surface
     pattern_faces = _generate_2d_tiles(target_shape, strategy, config)

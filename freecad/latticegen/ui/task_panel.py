@@ -31,6 +31,7 @@ class PatternTaskPanel(BaseTaskPanel):
 
         self.form.pattern_combo.currentIndexChanged.connect(self.queue_preview)
         self.form.mapping_combo.currentIndexChanged.connect(self.queue_preview)
+        self.form.axis_combo.currentIndexChanged.connect(self.queue_preview)
         self.form.radius_spin.valueChanged.connect(self.queue_preview)
         self.form.gap_spin.valueChanged.connect(self.queue_preview)
         self.form.depth_spin.valueChanged.connect(self.queue_preview)
@@ -53,6 +54,7 @@ class PatternTaskPanel(BaseTaskPanel):
         return LatticeConfig(
             pattern=self.form.pattern_combo.currentText(),
             mapping=self.form.mapping_combo.currentText(),
+            axis=self.form.axis_combo.currentText(),
             tile_radius=self.form.radius_spin.value(),
             gap=self.form.gap_spin.value(),
             extrude_depth=self.form.depth_spin.value(),

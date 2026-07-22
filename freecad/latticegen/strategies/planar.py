@@ -16,27 +16,25 @@ from freecad.latticegen.utils import calculate_projected_normal
 
 
 class PlanarStrategy(BaseMappingStrategy):
-    """Direct planar projection on the XY plane."""
-    
+    """Direct planar projection on the selected Axis plane."""
     name = "Planar"
 
-    def setup_bounds(self, border_size: float, offset_x: float,
-                     offset_y: float):
-        return self.bbox.XMin, self.bbox.XMax, self.bbox.YMin, self.bbox.YMax, offset_x, offset_y
+    def setup_bounds(self, border_size: float, offset_x: float, offset_y: float):
+        return self.a_min, self.a_max, self.b_min, self.b_max, offset_x, offset_y
 
     def get_mapping(self, u: float, v: float):
-        pos = App.Vector(u, v, self.bbox.ZMin - BOOL_OVERSHOOT)
-        norm = App.Vector(0, 0, 1)
-        tan_u = App.Vector(1, 0, 0)
-        tan_v = App.Vector(0, 1, 0)
+        pos = self.to_global(u, v, self.c_min - BOOL_OVERSHOOT)
+        norm = self.to_global(0, 0, 1)
+        tan_u = self.to_global(1, 0, 0)
+        tan_v = self.to_global(0, 1, 0)
         return pos, norm, tan_u, tan_v
 
     def get_base_pos(self, pos: App.Vector, norm: App.Vector) -> App.Vector:
         return pos
 
-    def get_extrude_vector(self, norm: App.Vector, extrude_depth: float,
-                           z_height: float) -> App.Vector:
-        return App.Vector(0, 0, z_height)
+    def get_extrude_vector(self, norm: App.Vector, extrude_depth: float, z_height: float) -> App.Vector:
+        span = self.c_max - self.c_min + BOOL_OVERSHOOT_LARGE
+        return self.to_global(0, 0, span)
 
     def get_clipping_shape(self, border_size: float):
         base_face = None
@@ -44,12 +42,11 @@ class PlanarStrategy(BaseMappingStrategy):
         if self.target_shape.ShapeType in ["Face", "Wire"]:
             base_face = self.target_shape
         else:
-            z_mid = (self.bbox.ZMax + self.bbox.ZMin) / 2.0
-            plane_dx = (self.bbox.XMax - self.bbox.XMin) + (BOUNDS_PADDING * 2)
-            plane_dy = (self.bbox.YMax - self.bbox.YMin) + (BOUNDS_PADDING * 2)
-            plane_pos = App.Vector(self.bbox.XMin - BOUNDS_PADDING,
-                                   self.bbox.YMin - BOUNDS_PADDING, z_mid)
-            plane_norm = App.Vector(0, 0, 1)
+            c_mid = (self.c_max + self.c_min) / 2.0
+            plane_dx = (self.a_max - self.a_min) + (BOUNDS_PADDING * 2)
+            plane_dy = (self.b_max - self.b_min) + (BOUNDS_PADDING * 2)
+            plane_pos = self.to_global(self.a_min - BOUNDS_PADDING, self.b_min - BOUNDS_PADDING, c_mid)
+            plane_norm = self.to_global(0, 0, 1)
 
             plane = Part.makePlane(plane_dx, plane_dy, plane_pos, plane_norm)
             cross_section = self.target_shape.section(plane)
@@ -74,13 +71,12 @@ class PlanarStrategy(BaseMappingStrategy):
                     offset_shape = Part.Face(offset_shape)
 
             if offset_shape and not offset_shape.isNull():
-                current_z = offset_shape.BoundBox.ZMin
-                z_offset = self.bbox.ZMin - BOOL_OVERSHOOT - current_z
-                offset_shape.translate(App.Vector(0, 0, z_offset))
+                current_c = self.get_c_val(offset_shape.CenterOfMass)
+                c_offset = (self.c_min - BOOL_OVERSHOOT) - current_c
+                offset_shape.translate(self.to_global(0, 0, c_offset))
 
-                extrude_z = self.bbox.ZMax + BOOL_OVERSHOOT_LARGE - (
-                    self.bbox.ZMin - BOOL_OVERSHOOT)
-                return offset_shape.extrude(App.Vector(0, 0, extrude_z))
+                extrude_c = self.c_max + BOOL_OVERSHOOT_LARGE - (self.c_min - BOOL_OVERSHOOT)
+                return offset_shape.extrude(self.to_global(0, 0, extrude_c))
         except Exception:
             pass
 
@@ -91,8 +87,10 @@ class PlanarStrategy(BaseMappingStrategy):
             return True
 
         def is_inside(px, py):
-            line_start = App.Vector(px, py, self.bbox.ZMin - BOOL_OVERSHOOT)
-            line_end = App.Vector(px, py, self.bbox.ZMax + BOOL_OVERSHOOT)
+            # px and py are in local coordinates when testing tiles
+            # We map back to local to test the bounding box effectively
+            line_start = self.to_global(px, py, self.c_min - BOOL_OVERSHOOT)
+            line_end = self.to_global(px, py, self.c_max + BOOL_OVERSHOOT)
             line = Part.makeLine(line_start, line_end)
             return line.distToShape(self.target_shape)[0] <= TOL_RELAXED
 
@@ -104,43 +102,40 @@ class PlanarStrategy(BaseMappingStrategy):
             return False
 
         if inclusion_threshold >= PERCENT_MAX:
-            return all(is_inside(pt.x, pt.y) for pt in pts_to_check)
+            # We must map the test_pts back to local coords since they are global
+            return all(is_inside(pt.x if self.axis!="X" else pt.y, pt.y if self.axis!="Y" else pt.z) for pt in pts_to_check)
 
-        inside_count = sum(1 for p in pts_to_check if is_inside(p.x, p.y))
-        return (inside_count / len(pts_to_check)) >= (inclusion_threshold /
-                                                      PERCENT_SCALE)
+        inside_count = sum(1 for pt in pts_to_check if is_inside(pt.x if self.axis!="X" else pt.y, pt.y if self.axis!="Y" else pt.z))
+        return (inside_count / len(pts_to_check)) >= (inclusion_threshold / PERCENT_SCALE)
 
 
 class ProjectedPlanarStrategy(PlanarStrategy):
-    """Raycast projection onto target surface along Z axis."""
-    
+    """Raycast projection onto target surface along the selected axis."""
     name = "Projected Planar"
 
     def get_mapping(self, u: float, v: float):
-        p_top = App.Vector(u, v, self.bbox.ZMax + self.max_dim)
-        p_bot = App.Vector(u, v, self.bbox.ZMin - self.max_dim)
+        p_top = self.to_global(u, v, self.c_max + self.max_dim)
+        p_bot = self.to_global(u, v, self.c_min - self.max_dim)
         ray = Part.makeLine(p_top, p_bot)
         intersections = self.target_shape.common(ray)
 
         hit_shape = False
         if intersections.Vertexes:
-            pos = max(intersections.Vertexes, key=lambda vtx: vtx.Point.z).Point
+            pos = max(intersections.Vertexes, key=lambda vtx: self.get_c_val(vtx.Point)).Point
             hit_shape = True
         else:
-            pos = App.Vector(u, v, self.bbox.ZMax)
+            pos = self.to_global(u, v, self.c_max)
 
-        norm = calculate_projected_normal(self.target_shape, pos,
-                                          App.Vector(0, 0, 1), hit_shape)
+        norm = calculate_projected_normal(self.target_shape, pos, self.to_global(0, 0, 1), hit_shape)
 
-        tan_u = App.Vector(0, 1, 0).cross(norm)
+        tan_u = self.to_global(0, 1, 0).cross(norm)
         if tan_u.Length < TOL_RELAXED:
-            tan_u = App.Vector(1, 0, 0)
+            tan_u = self.to_global(1, 0, 0)
 
         tan_u.normalize()
         tan_v = norm.cross(tan_u).normalize()
 
         return pos, norm, tan_u, tan_v
 
-    def get_extrude_vector(self, norm: App.Vector, extrude_depth: float,
-                           z_height: float) -> App.Vector:
+    def get_extrude_vector(self, norm: App.Vector, extrude_depth: float, z_height: float) -> App.Vector:
         return -norm * (extrude_depth + BOOL_OVERSHOOT_LARGE)

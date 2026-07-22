@@ -13,37 +13,34 @@ from freecad.latticegen.utils import calculate_projected_normal
 
 class SphericalStrategy(WrapStrategy):
     """Spherical polar coordinate projection."""
-    
     name = "Spherical"
 
-    def setup_bounds(self, border_size: float, offset_x: float,
-                     offset_y: float):
+    def setup_bounds(self, border_size: float, offset_x: float, offset_y: float):
         self.R = self.max_dim / 2.0
         return 0.0, 2 * math.pi * self.R, 0.0, math.pi * self.R, offset_x, offset_y
 
     def get_mapping(self, u: float, v: float):
         theta, phi = u / self.R, v / self.R
 
-        x_val = self.Cx + self.R * math.cos(theta) * math.sin(phi)
-        y_val = self.Cy + self.R * math.sin(theta) * math.sin(phi)
-        z_val = self.Cz + self.R * math.cos(phi)
-        pos = App.Vector(x_val, y_val, z_val)
+        x_val = self.local_C_a + self.R * math.cos(theta) * math.sin(phi)
+        y_val = self.local_C_b + self.R * math.sin(theta) * math.sin(phi)
+        z_val = self.local_C_c + self.R * math.cos(phi)
+        pos = self.to_global(x_val, y_val, z_val)
 
-        norm = App.Vector(
+        norm = self.to_global(
             math.cos(theta) * math.sin(phi),
             math.sin(theta) * math.sin(phi),
             math.cos(phi),
         ).normalize()
 
-        tan_u = App.Vector(-math.sin(theta), math.cos(theta), 0)
+        tan_u = self.to_global(-math.sin(theta), math.cos(theta), 0)
         if tan_u.Length < TOL_RELAXED:
-            tan_u = App.Vector(1, 0, 0)
+            tan_u = self.to_global(1, 0, 0)
 
         tan_u.normalize()
         tan_v = norm.cross(tan_u).normalize()
 
-        return pos, norm, tan_u * (self.wrap_scale *
-                                   math.sin(phi)), tan_v * self.wrap_scale
+        return pos, norm, tan_u * (self.wrap_scale * math.sin(phi)), tan_v * self.wrap_scale
 
     def is_valid_uv(self, u: float, v: float, u_min: float, u_max: float,
                     v_min: float, v_max: float) -> bool:
@@ -52,14 +49,13 @@ class SphericalStrategy(WrapStrategy):
 
 class ProjectedSphericalStrategy(SphericalStrategy):
     """Raycast spherical projection with latitude pinching."""
-    
     name = "Projected Spherical"
 
     def get_mapping(self, u: float, v: float):
         theta, phi = u / self.R, v / self.R
-        p_center = App.Vector(self.Cx, self.Cy, self.Cz)
+        p_center = self.to_global(self.local_C_a, self.local_C_b, self.local_C_c)
 
-        ray_dir = App.Vector(
+        ray_dir = self.to_global(
             math.cos(theta) * math.sin(phi),
             math.sin(theta) * math.sin(phi),
             math.cos(phi),
@@ -75,12 +71,11 @@ class ProjectedSphericalStrategy(SphericalStrategy):
         else:
             pos = p_center + ray_dir * self.R
 
-        norm = calculate_projected_normal(self.target_shape, pos, ray_dir,
-                                          hit_shape)
+        norm = calculate_projected_normal(self.target_shape, pos, ray_dir, hit_shape)
 
-        tan_u = App.Vector(0, 0, 1).cross(norm)
+        tan_u = self.to_global(0, 0, 1).cross(norm)
         if tan_u.Length < TOL_RELAXED:
-            tan_u = App.Vector(1, 0, 0)
+            tan_u = self.to_global(1, 0, 0)
 
         tan_u.normalize()
         tan_v = norm.cross(tan_u).normalize()
@@ -96,20 +91,18 @@ class ProjectedSphericalStrategy(SphericalStrategy):
 
 class RadialStrategy(WrapStrategy):
     """Radial disk projection on top planar faces."""
-    
     name = "Radial"
 
-    def setup_bounds(self, border_size: float, offset_x: float,
-                     offset_y: float):
+    def setup_bounds(self, border_size: float, offset_x: float, offset_y: float):
         return 0.0, 2 * math.pi * self.R, 0.0, self.R, offset_x, offset_y
 
     def get_mapping(self, u: float, v: float):
         theta = u / self.R
-        pos = App.Vector(self.Cx + v * math.cos(theta),
-                         self.Cy + v * math.sin(theta), self.bbox.ZMax)
-        norm = App.Vector(0, 0, 1)
-        tan_u = App.Vector(-math.sin(theta), math.cos(theta), 0)
-        tan_v = App.Vector(math.cos(theta), math.sin(theta), 0)
+        pos = self.to_global(self.local_C_a + v * math.cos(theta),
+                             self.local_C_b + v * math.sin(theta), self.c_max)
+        norm = self.to_global(0, 0, 1)
+        tan_u = self.to_global(-math.sin(theta), math.cos(theta), 0)
+        tan_v = self.to_global(math.cos(theta), math.sin(theta), 0)
         return pos, norm, tan_u, tan_v
 
     def get_base_pos(self, pos: App.Vector, norm: App.Vector) -> App.Vector:
@@ -117,7 +110,7 @@ class RadialStrategy(WrapStrategy):
 
     def get_extrude_vector(self, norm: App.Vector, extrude_depth: float,
                            z_height: float) -> App.Vector:
-        return App.Vector(0, 0, z_height)
+        return self.to_global(0, 0, z_height)
 
     def is_valid_uv(self, u: float, v: float, u_min: float, u_max: float,
                     v_min: float, v_max: float) -> bool:

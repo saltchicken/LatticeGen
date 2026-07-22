@@ -16,3 +16,4 @@ class LatticeConfig:
     offset_x: float = 0.0
     offset_y: float = 0.0
     operation_mode: str = "cut"
+    axis: str = "Z"

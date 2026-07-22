@@ -16,7 +16,7 @@ class MappingFactory:
     """Instantiates strategy handlers based on string selection."""
 
     @classmethod
-    def create(cls, mapping_type: str, target_shape, target_face=None):
+    def create(cls, mapping_type: str, target_shape, target_face=None, axis="Z"):
         strategy_class = BaseMappingStrategy._registry.get(mapping_type, PlanarStrategy)
 
         if mapping_type == "Surface UV" and not target_face:
@@ -24,7 +24,7 @@ class MappingFactory:
             if faces:
                 target_face = max(faces, key=lambda f: f.Area)
 
-        return strategy_class(target_shape, target_shape.BoundBox, target_face)
+        return strategy_class(target_shape, target_shape.BoundBox, target_face, axis=axis)
         
     @staticmethod
     def get_available_mappings() -> list:
