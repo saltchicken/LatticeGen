@@ -227,6 +227,9 @@ class VoronoiTile(BaseTile):
     @staticmethod
     def _create_face_fallback(base_pos, norm, tan_u, tan_v, config):
         """Legacy standalone Voronoi approximation logic if scipy isn't available."""
+
+        # TODO: Let the user know that the fallback is being used because scipy didn't work
+
         radius = config.tile_radius
         variance = config.voronoi_variance
         
