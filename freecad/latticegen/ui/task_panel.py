@@ -26,7 +26,7 @@ class PatternTaskPanel(BaseTaskPanel):
     def setup_ui(self):
         self.form.pattern_combo.clear()
         self.form.pattern_combo.addItems(TileFactory.get_available_patterns())
-        
+
         self.form.mapping_combo.clear()
         self.form.mapping_combo.addItems(MappingFactory.get_available_mappings())
 
@@ -47,6 +47,32 @@ class PatternTaskPanel(BaseTaskPanel):
         if hasattr(self.form, "preview_toggle_check"):
             self.form.preview_toggle_check.stateChanged.connect(
                 self.queue_preview)
+
+        # --- Auto-update wiring ---
+        if hasattr(self.form, "auto_update_check"):
+            self.form.auto_update_check.stateChanged.connect(self._on_auto_update_changed)
+            # Sync button state on load
+            self.form.refresh_button.setEnabled(not self.form.auto_update_check.isChecked())
+
+        if hasattr(self.form, "refresh_button"):
+            self.form.refresh_button.clicked.connect(self.force_preview)
+
+    def _on_auto_update_changed(self, state):
+        """Toggles the refresh button and updates immediately when turned back on."""
+        is_auto = self.form.auto_update_check.isChecked()
+        self.form.refresh_button.setEnabled(not is_auto)
+        if is_auto:
+            self.force_preview()
+
+    def queue_preview(self, *args):
+        """Intercepts the preview request if auto-update is disabled."""
+        if hasattr(self.form, "auto_update_check") and not self.form.auto_update_check.isChecked():
+            return
+        super().queue_preview(*args)
+
+    def force_preview(self, *args):
+        """Bypasses the auto-update check to force a refresh."""
+        super().queue_preview(*args)
 
     def get_config_from_ui(self) -> LatticeConfig:
         """Hydrates a configuration object from current UI widget states."""
