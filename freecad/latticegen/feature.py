@@ -52,6 +52,12 @@ class LatticeToolFeature:
         # Custom specialized parameters
         obj.addProperty("App::PropertyInteger", "VoronoiSeed", "Voronoi", "Seed for randomness").VoronoiSeed = 12345
         obj.addProperty("App::PropertyFloat", "VoronoiVariance", "Voronoi", "Variance for randomness").VoronoiVariance = 0.5
+        obj.addProperty("App::PropertyInteger", "VoronoiRelaxation", "Voronoi", "Lloyd's relaxation steps").VoronoiRelaxation = 0
+        obj.addProperty("App::PropertyFloat", "VoronoiGapVariance", "Voronoi", "Variance in strut thickness").VoronoiGapVariance = 0.0
+        obj.addProperty("App::PropertyEnumeration", "VoronoiBaseGrid", "Voronoi", "Starting topology")
+        obj.VoronoiBaseGrid = ["Hexagon", "Square"]
+        obj.addProperty("App::PropertyFloat", "VoronoiStretchU", "Voronoi", "Stretch along U axis").VoronoiStretchU = 1.0
+        obj.addProperty("App::PropertyFloat", "VoronoiStretchV", "Voronoi", "Stretch along V axis").VoronoiStretchV = 1.0
 
         # Initialize visibility state
         self.update_property_visibility(obj)
@@ -111,7 +117,12 @@ class LatticeToolFeature:
                 offset_y=get_val("OffsetY"),
                 operation_mode=obj.OperationMode,
                 voronoi_seed=get_val("VoronoiSeed") if hasattr(obj, "VoronoiSeed") else 12345,
-                voronoi_variance=get_val("VoronoiVariance") if hasattr(obj, "VoronoiVariance") else 0.5
+                voronoi_variance=get_val("VoronoiVariance") if hasattr(obj, "VoronoiVariance") else 0.5,
+                voronoi_relaxation=get_val("VoronoiRelaxation") if hasattr(obj, "VoronoiRelaxation") else 0,
+                voronoi_gap_variance=get_val("VoronoiGapVariance") if hasattr(obj, "VoronoiGapVariance") else 0.0,
+                voronoi_base_grid=get_val("VoronoiBaseGrid") if hasattr(obj, "VoronoiBaseGrid") else "Hexagon",
+                voronoi_stretch_u=get_val("VoronoiStretchU") if hasattr(obj, "VoronoiStretchU") else 1.0,
+                voronoi_stretch_v=get_val("VoronoiStretchV") if hasattr(obj, "VoronoiStretchV") else 1.0
             )
 
             target_face = None

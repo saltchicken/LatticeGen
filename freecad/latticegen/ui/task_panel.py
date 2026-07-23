@@ -54,6 +54,16 @@ class PatternTaskPanel(BaseTaskPanel):
             self.form.voronoi_seed_spin.valueChanged.connect(self.queue_preview)
         if hasattr(self.form, "voronoi_variance_spin"):
             self.form.voronoi_variance_spin.valueChanged.connect(self.queue_preview)
+        if hasattr(self.form, "voronoi_relax_spin"):
+            self.form.voronoi_relax_spin.valueChanged.connect(self.queue_preview)
+        if hasattr(self.form, "voronoi_gapvar_spin"):
+            self.form.voronoi_gapvar_spin.valueChanged.connect(self.queue_preview)
+        if hasattr(self.form, "voronoi_grid_combo"):
+            self.form.voronoi_grid_combo.currentIndexChanged.connect(self.queue_preview)
+        if hasattr(self.form, "voronoi_stretch_u_spin"):
+            self.form.voronoi_stretch_u_spin.valueChanged.connect(self.queue_preview)
+        if hasattr(self.form, "voronoi_stretch_v_spin"):
+            self.form.voronoi_stretch_v_spin.valueChanged.connect(self.queue_preview)
 
         if hasattr(self.form, "preview_toggle_check"):
             self.form.preview_toggle_check.stateChanged.connect(self.queue_preview)
@@ -78,6 +88,11 @@ class PatternTaskPanel(BaseTaskPanel):
             "OffsetY": getattr(self.form, "offset_y_spin", None),
             "VoronoiSeed": getattr(self.form, "voronoi_seed_spin", None),
             "VoronoiVariance": getattr(self.form, "voronoi_variance_spin", None),
+            "VoronoiRelaxation": getattr(self.form, "voronoi_relax_spin", None),
+            "VoronoiGapVariance": getattr(self.form, "voronoi_gapvar_spin", None),
+            "VoronoiBaseGrid": getattr(self.form, "voronoi_grid_combo", None),
+            "VoronoiStretchU": getattr(self.form, "voronoi_stretch_u_spin", None),
+            "VoronoiStretchV": getattr(self.form, "voronoi_stretch_v_spin", None),
         }
         
         # Initialize visibility state
@@ -147,7 +162,12 @@ class PatternTaskPanel(BaseTaskPanel):
             offset_y=self.form.offset_y_spin.value(),
             operation_mode=mode,
             voronoi_seed=self.form.voronoi_seed_spin.value() if hasattr(self.form, "voronoi_seed_spin") else 12345,
-            voronoi_variance=self.form.voronoi_variance_spin.value() if hasattr(self.form, "voronoi_variance_spin") else 0.5
+            voronoi_variance=self.form.voronoi_variance_spin.value() if hasattr(self.form, "voronoi_variance_spin") else 0.5,
+            voronoi_relaxation=self.form.voronoi_relax_spin.value() if hasattr(self.form, "voronoi_relax_spin") else 0,
+            voronoi_gap_variance=self.form.voronoi_gapvar_spin.value() if hasattr(self.form, "voronoi_gapvar_spin") else 0.0,
+            voronoi_base_grid=self.form.voronoi_grid_combo.currentText() if hasattr(self.form, "voronoi_grid_combo") else "Hexagon",
+            voronoi_stretch_u=self.form.voronoi_stretch_u_spin.value() if hasattr(self.form, "voronoi_stretch_u_spin") else 1.0,
+            voronoi_stretch_v=self.form.voronoi_stretch_v_spin.value() if hasattr(self.form, "voronoi_stretch_v_spin") else 1.0
         )
 
     def get_shape(self, config: LatticeConfig, return_tool: bool = True):

@@ -134,7 +134,10 @@ class VoronoiTile(BaseTile):
     name = "Voronoi"
     
     # Request custom UI parameters
-    custom_parameters = ["VoronoiSeed", "VoronoiVariance"]
+    custom_parameters = [
+        "VoronoiSeed", "VoronoiVariance", "VoronoiRelaxation", 
+        "VoronoiGapVariance", "VoronoiBaseGrid", "VoronoiStretchU", "VoronoiStretchV"
+    ]
 
     @classmethod
     def get_grid_dimensions(cls, step_radius: float):
@@ -149,15 +152,22 @@ class VoronoiTile(BaseTile):
             
         step_radius = config.tile_radius + config.gap
         variance = config.voronoi_variance
-        dx, dy, _ = VoronoiTile.get_grid_dimensions(step_radius)
+        
+        # Grid Topology Setup
+        if config.voronoi_base_grid == "Square":
+            dx, dy, is_staggered = 2.0 * step_radius, 2.0 * step_radius, False
+        else:
+            dx, dy, is_staggered = 1.5 * step_radius, math.sqrt(3) * step_radius, True
+            
+        # Stretch setup (protect against division by zero)
+        su = config.voronoi_stretch_u if config.voronoi_stretch_u > 0.01 else 1.0
+        sv = config.voronoi_stretch_v if config.voronoi_stretch_v > 0.01 else 1.0
         
         def get_offset(lx, ly):
             gx = base_pos.x + tan_u.x * lx + tan_v.x * ly
             gy = base_pos.y + tan_u.y * lx + tan_v.y * ly
             gz = base_pos.z + tan_u.z * lx + tan_v.z * ly
             
-            # Round to 1 decimal place to absorb floating point & tangent projection differences
-            # Add 0.0 to prevent negative zero hashing conflicts (-0.0 vs 0.0)
             rx = round(gx, 1) + 0.0
             ry = round(gy, 1) + 0.0
             rz = round(gz, 1) + 0.0
@@ -171,17 +181,20 @@ class VoronoiTile(BaseTile):
                 return (h / 0x7fffffff) * 2.0 - 1.0
                 
             max_offset = variance * step_radius * 0.45
-            return lx + rand() * max_offset, ly + rand() * max_offset
+            
+            # Divide by stretch factors here so that the initial seed points 
+            # are mathematically morphed prior to Voronoi diagram generation.
+            return (lx + rand() * max_offset) / su, (ly + rand() * max_offset) / sv
 
         points_2d = []
         center_idx = -1
         
-        # Build a 5x5 local grid of seeds to bound the center voronoi cell securely
+        # Build a 5x5 local grid
         for i in range(-2, 3):
             for j in range(-2, 3):
                 lx = i * dx
                 ly = j * dy
-                if i % 2 != 0:
+                if is_staggered and i % 2 != 0:
                     ly += dy / 2.0
                     
                 px, py = get_offset(lx, ly)
@@ -191,6 +204,24 @@ class VoronoiTile(BaseTile):
                     center_idx = len(points_2d) - 1
 
         try:
+            # 1. Relaxation (Lloyd's Algorithm)
+            for _ in range(config.voronoi_relaxation):
+                vor = Voronoi(points_2d)
+                new_points = []
+                for i, p in enumerate(points_2d):
+                    region_idx = vor.point_region[i]
+                    region = vor.regions[region_idx]
+                    if -1 in region or not region:
+                        new_points.append(p)
+                    else:
+                        poly = [vor.vertices[v] for v in region]
+                        # Vertex average provides a stable centroid proxy for convex regions
+                        cx = sum(v[0] for v in poly) / len(poly)
+                        cy = sum(v[1] for v in poly) / len(poly)
+                        new_points.append([cx, cy])
+                points_2d = new_points
+                
+            # 2. Final Diagram computation
             vor = Voronoi(points_2d)
             region_idx = vor.point_region[center_idx]
             region = vor.regions[region_idx]
@@ -198,13 +229,29 @@ class VoronoiTile(BaseTile):
             if -1 in region or not region:
                 raise ValueError("Unbounded Voronoi region generated")
                 
-            local_pts = [vor.vertices[v_idx] for v_idx in region]
+            # Multiply by stretch factors to transform geometry back to target surface scale
+            local_pts = [(vor.vertices[v_idx][0] * su, vor.vertices[v_idx][1] * sv) for v_idx in region]
             
-            # Find centroid to scale the cell for gap spacing
+            # 3. Gap Variance logic based on global position hash
+            gap_var = config.voronoi_gap_variance
+            if gap_var > 0.0:
+                rx = round(base_pos.x, 1) + 0.0
+                ry = round(base_pos.y, 1) + 0.0
+                rz = round(base_pos.z, 1) + 0.0
+                cv_hash_str = f"gap_{rx}_{ry}_{rz}_{config.voronoi_seed}"
+                cv_hash = int(hashlib.md5(cv_hash_str.encode()).hexdigest()[:8], 16)
+                gap_rnd = cv_hash / 0xffffffff
+                
+                # Bounded so cell scale never collapses entirely
+                gap_scale = 1.0 - (gap_var * 0.7 * gap_rnd)
+            else:
+                gap_scale = 1.0
+            
+            # 4. Final Cell Scaling
             cx = sum(p[0] for p in local_pts) / len(local_pts)
             cy = sum(p[1] for p in local_pts) / len(local_pts)
             
-            scale = config.tile_radius / step_radius if step_radius > 0 else 1.0
+            scale = (config.tile_radius / step_radius) * gap_scale if step_radius > 0 else 1.0
             
             scaled_pts = []
             for px, py in local_pts:
@@ -221,15 +268,11 @@ class VoronoiTile(BaseTile):
             return face, test_pts_3d
             
         except Exception:
-            # Fall back to standard fallback approach if voronoi or geometry construction fails
             return VoronoiTile._create_face_fallback(base_pos, norm, tan_u, tan_v, config)
 
     @staticmethod
     def _create_face_fallback(base_pos, norm, tan_u, tan_v, config):
         """Legacy standalone Voronoi approximation logic if scipy isn't available."""
-
-        # TODO: Let the user know that the fallback is being used because scipy didn't work
-
         radius = config.tile_radius
         variance = config.voronoi_variance
         

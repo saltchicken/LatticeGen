@@ -21,3 +21,8 @@ class LatticeConfig:
     # Custom specific parameters
     voronoi_seed: int = 12345
     voronoi_variance: float = 0.5
+    voronoi_relaxation: int = 0
+    voronoi_gap_variance: float = 0.0
+    voronoi_base_grid: str = "Hexagon"
+    voronoi_stretch_u: float = 1.0
+    voronoi_stretch_v: float = 1.0
