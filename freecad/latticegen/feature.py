@@ -63,8 +63,11 @@ class LatticeToolFeature:
 
     def update_property_visibility(self, obj):
         """Dynamically hides/shows properties based on Tile and Strategy metadata."""
-        tile_cls = BaseTile._registry.get(obj.Pattern, BaseTile)
-        mapping_cls = BaseMappingStrategy._registry.get(obj.Mapping, BaseMappingStrategy)
+        current_pattern = getattr(obj, "Pattern", "")
+        current_mapping = getattr(obj, "Mapping", "")
+
+        tile_cls = BaseTile._registry.get(current_pattern, BaseTile)
+        mapping_cls = BaseMappingStrategy._registry.get(current_mapping, BaseMappingStrategy)
         
         base_props = [
             "TileRadius", "Gap", "ExtrudeDepth", "FilletRadius", 
