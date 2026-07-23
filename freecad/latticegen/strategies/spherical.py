@@ -14,6 +14,9 @@ from freecad.latticegen.utils import calculate_projected_normal
 class SphericalStrategy(WrapStrategy):
     """Spherical polar coordinate projection."""
     name = "Spherical"
+    
+    # Hide offsets for spherical mapping
+    unsupported_parameters = ["OffsetX", "OffsetY"]
 
     def setup_bounds(self, border_size: float, offset_x: float, offset_y: float):
         self.R = self.max_dim / 2.0
@@ -50,6 +53,7 @@ class SphericalStrategy(WrapStrategy):
 class ProjectedSphericalStrategy(SphericalStrategy):
     """Raycast spherical projection with latitude pinching."""
     name = "Projected Spherical"
+    # Inherits unsupported_parameters from SphericalStrategy
 
     def get_mapping(self, u: float, v: float):
         theta, phi = u / self.R, v / self.R
@@ -92,6 +96,9 @@ class ProjectedSphericalStrategy(SphericalStrategy):
 class RadialStrategy(WrapStrategy):
     """Radial disk projection on top planar faces."""
     name = "Radial"
+    
+    # Hide offsets for radial mapping
+    unsupported_parameters = ["OffsetX", "OffsetY"]
 
     def setup_bounds(self, border_size: float, offset_x: float, offset_y: float):
         return 0.0, 2 * math.pi * self.R, 0.0, self.R, offset_x, offset_y

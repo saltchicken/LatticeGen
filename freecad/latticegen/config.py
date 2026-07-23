@@ -17,3 +17,7 @@ class LatticeConfig:
     offset_y: float = 0.0
     operation_mode: str = "cut"
     axis: str = "Z"
+    
+    # Custom specific parameters
+    voronoi_seed: int = 12345
+    voronoi_variance: float = 0.5

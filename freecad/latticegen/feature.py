@@ -7,7 +7,8 @@ from freecad.latticegen.config import LatticeConfig
 from freecad.latticegen.core import generate_lattice_shape
 from freecad.latticegen.resources import Resources
 from freecad.latticegen.strategies import MappingFactory
-from freecad.latticegen.tiles import TileFactory
+from freecad.latticegen.strategies.base import BaseMappingStrategy
+from freecad.latticegen.tiles import BaseTile, TileFactory
 
 
 class LatticeToolFeature:
@@ -48,13 +49,47 @@ class LatticeToolFeature:
         obj.addProperty("App::PropertyDistance", "OffsetY", "Parameters", "Y Offset").OffsetY = 0.0
         obj.addProperty("App::PropertyFloat", "InclusionThreshold", "Parameters", "Min visibility %").InclusionThreshold = 0.0
 
+        # Custom specialized parameters
+        obj.addProperty("App::PropertyInteger", "VoronoiSeed", "Voronoi", "Seed for randomness").VoronoiSeed = 12345
+        obj.addProperty("App::PropertyFloat", "VoronoiVariance", "Voronoi", "Variance for randomness").VoronoiVariance = 0.5
+
+        # Initialize visibility state
+        self.update_property_visibility(obj)
+
+    def onChanged(self, obj, prop):
+        """Called automatically by FreeCAD when a property changes."""
+        if prop in ["Mapping", "Pattern"]:
+            self.update_property_visibility(obj)
+
+    def update_property_visibility(self, obj):
+        """Dynamically hides/shows properties based on Tile and Strategy metadata."""
+        tile_cls = BaseTile._registry.get(obj.Pattern, BaseTile)
+        mapping_cls = BaseMappingStrategy._registry.get(obj.Mapping, BaseMappingStrategy)
+        
+        base_props = [
+            "TileRadius", "Gap", "ExtrudeDepth", "FilletRadius", 
+            "BorderSize", "OffsetX", "OffsetY", "InclusionThreshold"
+        ]
+
+        # Iterate through all properties
+        for prop in obj.PropertiesList:
+            if prop in ["Target", "TargetFace", "OperationMode", "Pattern", "Mapping", "Axis"]:
+                continue
+
+            if prop in base_props:
+                is_hidden = (prop in mapping_cls.unsupported_parameters) or \
+                            (prop in tile_cls.unsupported_parameters)
+                obj.setEditorMode(prop, 2 if is_hidden else 0)
+            else:
+                # Treat as custom parameter. Show only if tile explicitly requests it.
+                is_visible = prop in tile_cls.custom_parameters
+                obj.setEditorMode(prop, 0 if is_visible else 2)
+
     def execute(self, obj):
         try:
             if not obj.Target or not hasattr(obj.Target, "Shape"):
                 return
 
-            # Helper to safely extract float values whether FreeCAD
-            # returns a Unit Quantity or a raw float
             def get_val(prop_name):
                 val = getattr(obj, prop_name)
                 return val.Value if hasattr(val, 'Value') else val
@@ -71,7 +106,9 @@ class LatticeToolFeature:
                 inclusion_threshold=get_val("InclusionThreshold"),
                 offset_x=get_val("OffsetX"),
                 offset_y=get_val("OffsetY"),
-                operation_mode=obj.OperationMode
+                operation_mode=obj.OperationMode,
+                voronoi_seed=get_val("VoronoiSeed") if hasattr(obj, "VoronoiSeed") else 12345,
+                voronoi_variance=get_val("VoronoiVariance") if hasattr(obj, "VoronoiVariance") else 0.5
             )
 
             target_face = None
@@ -91,7 +128,6 @@ class LatticeToolFeature:
                 App.Console.PrintWarning(f"{obj.Name}: Generated boolean shape is empty.\n")
 
         except Exception as e:
-            # If anything breaks, print the exact error and line number to the FreeCAD console
             import traceback
             App.Console.PrintError(f"LatticeTool failed to execute: {e}\n{traceback.format_exc()}\n")
 
@@ -107,11 +143,9 @@ class ViewProviderLatticeTool:
         self.Object = vobj.Object
 
     def __getstate__(self):
-        """Called during save. Return None to prevent serializing C++ objects."""
         return None
 
     def __setstate__(self, state):
-        """Called during document restore."""
         return None
 
     def getIcon(self):
@@ -121,10 +155,7 @@ class ViewProviderLatticeTool:
         return []
 
     def setEdit(self, vobj, mode=0):
-        # Return False to tell FreeCAD we don't have a custom Task Panel to open.
-        # Users will edit the parametric values via the Data property tab instead.
         return False
 
     def doubleClicked(self, vobj):
-        # Intercept the double-click so FreeCAD doesn't look for getEditDialog()
         return False

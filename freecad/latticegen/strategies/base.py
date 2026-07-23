@@ -19,6 +19,9 @@ class BaseMappingStrategy:
 
     name = "Base"
     _registry = {}
+    
+    # UI Metadata: Standard properties this strategy does NOT support
+    unsupported_parameters = []
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -37,7 +40,6 @@ class BaseMappingStrategy:
         self.Cz = (bbox.ZMax + bbox.ZMin) / 2.0
 
         # Local coordinate mapping based on chosen axis
-        # (a, b) represent the cross section plane, c represents the primary extrusion/cylinder axis
         if axis == "X":
             self.local_C_a, self.local_C_b, self.local_C_c = self.Cy, self.Cz, self.Cx
             self.a_min, self.a_max = bbox.YMin, bbox.YMax
@@ -62,13 +64,11 @@ class BaseMappingStrategy:
         self.R = max(self.a_max - self.a_min, self.b_max - self.b_min) / 2.0
 
     def to_global(self, a: float, b: float, c: float) -> App.Vector:
-        """Translates local (a,b,c) parameters to a global App.Vector based on primary axis."""
         if self.axis == "X": return App.Vector(c, a, b)
         if self.axis == "Y": return App.Vector(b, c, a)
         return App.Vector(a, b, c)
 
     def get_c_val(self, pt: App.Vector) -> float:
-        """Gets the coordinate value of a vector along the primary axis."""
         if self.axis == "X": return pt.x
         if self.axis == "Y": return pt.y
         return pt.z

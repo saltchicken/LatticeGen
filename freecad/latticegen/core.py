@@ -40,8 +40,9 @@ def _generate_2d_tiles(target_shape, strategy, config: LatticeConfig):
             pos, norm, tan_u, tan_v = strategy.get_mapping(u, v)
             base_pos = strategy.get_base_pos(pos, norm)
 
+            # Pass the full config so tiles can access custom parameters
             tile_face, test_pts = tile_generator.create_face(
-                base_pos, norm, tan_u, tan_v, config.tile_radius)
+                base_pos, norm, tan_u, tan_v, config)
 
             if strategy.is_tile_valid(test_pts, config.inclusion_threshold):
                 pattern_faces.append((tile_face, norm))

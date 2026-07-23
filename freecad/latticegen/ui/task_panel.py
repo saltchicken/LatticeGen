@@ -1,6 +1,7 @@
 """Task Panel UI binding for lattice pattern generation."""
 
 import FreeCAD as App
+from PySide6 import QtWidgets
 
 from freecad.latticegen import workflow
 from freecad.latticegen.config import LatticeConfig
@@ -8,7 +9,8 @@ from freecad.latticegen.constants import PREVIEW_TRANSPARENCY
 from freecad.latticegen.core import generate_lattice_shape
 from freecad.latticegen.resources import Resources
 from freecad.latticegen.strategies import MappingFactory
-from freecad.latticegen.tiles import TileFactory
+from freecad.latticegen.strategies.base import BaseMappingStrategy
+from freecad.latticegen.tiles import BaseTile, TileFactory
 from freecad.latticegen.ui.base_panel import BaseTaskPanel
 
 
@@ -30,6 +32,10 @@ class PatternTaskPanel(BaseTaskPanel):
         self.form.mapping_combo.clear()
         self.form.mapping_combo.addItems(MappingFactory.get_available_mappings())
 
+        # Wire up visibility updates
+        self.form.pattern_combo.currentIndexChanged.connect(self.update_ui_visibility)
+        self.form.mapping_combo.currentIndexChanged.connect(self.update_ui_visibility)
+
         self.form.pattern_combo.currentIndexChanged.connect(self.queue_preview)
         self.form.mapping_combo.currentIndexChanged.connect(self.queue_preview)
         self.form.axis_combo.currentIndexChanged.connect(self.queue_preview)
@@ -41,43 +47,92 @@ class PatternTaskPanel(BaseTaskPanel):
         self.form.threshold_spin.valueChanged.connect(self.queue_preview)
         self.form.offset_x_spin.valueChanged.connect(self.queue_preview)
         self.form.offset_y_spin.valueChanged.connect(self.queue_preview)
-        self.form.operation_combo.currentIndexChanged.connect(
-            self.queue_preview)
+        self.form.operation_combo.currentIndexChanged.connect(self.queue_preview)
+        
+        # Connect specific parameters if they exist in the UI file
+        if hasattr(self.form, "voronoi_seed_spin"):
+            self.form.voronoi_seed_spin.valueChanged.connect(self.queue_preview)
+        if hasattr(self.form, "voronoi_variance_spin"):
+            self.form.voronoi_variance_spin.valueChanged.connect(self.queue_preview)
 
         if hasattr(self.form, "preview_toggle_check"):
-            self.form.preview_toggle_check.stateChanged.connect(
-                self.queue_preview)
+            self.form.preview_toggle_check.stateChanged.connect(self.queue_preview)
 
         # --- Auto-update wiring ---
         if hasattr(self.form, "auto_update_check"):
             self.form.auto_update_check.stateChanged.connect(self._on_auto_update_changed)
-            # Sync button state on load
             self.form.refresh_button.setEnabled(not self.form.auto_update_check.isChecked())
 
         if hasattr(self.form, "refresh_button"):
             self.form.refresh_button.clicked.connect(self.force_preview)
+            
+        # Map FreeCAD property names to Qt Widget objects
+        self.prop_to_widget = {
+            "TileRadius": getattr(self.form, "radius_spin", None),
+            "Gap": getattr(self.form, "gap_spin", None),
+            "ExtrudeDepth": getattr(self.form, "depth_spin", None),
+            "FilletRadius": getattr(self.form, "fillet_spin", None),
+            "BorderSize": getattr(self.form, "border_spin", None),
+            "InclusionThreshold": getattr(self.form, "threshold_spin", None),
+            "OffsetX": getattr(self.form, "offset_x_spin", None),
+            "OffsetY": getattr(self.form, "offset_y_spin", None),
+            "VoronoiSeed": getattr(self.form, "voronoi_seed_spin", None),
+            "VoronoiVariance": getattr(self.form, "voronoi_variance_spin", None),
+        }
+        
+        # Initialize visibility state
+        self.update_ui_visibility()
+
+    def update_ui_visibility(self):
+        """Rule engine to determine which fields are visible."""
+        tile_cls = BaseTile._registry.get(self.form.pattern_combo.currentText(), BaseTile)
+        mapping_cls = BaseMappingStrategy._registry.get(self.form.mapping_combo.currentText(), BaseMappingStrategy)
+        
+        base_props = [
+            "TileRadius", "Gap", "ExtrudeDepth", "FilletRadius", 
+            "BorderSize", "OffsetX", "OffsetY", "InclusionThreshold"
+        ]
+
+        for prop_name, widget in self.prop_to_widget.items():
+            if not widget:
+                continue
+                
+            if prop_name in base_props:
+                is_hidden = (prop_name in mapping_cls.unsupported_parameters) or \
+                            (prop_name in tile_cls.unsupported_parameters)
+                self._set_field_visible(widget, not is_hidden)
+            else:
+                # Custom parameter
+                is_visible = (prop_name in tile_cls.custom_parameters)
+                self._set_field_visible(widget, is_visible)
+
+    def _set_field_visible(self, widget, is_visible):
+        """Hides the widget and its accompanying QLabel in a QFormLayout."""
+        widget.setVisible(is_visible)
+        
+        # FreeCAD UI forms are typically nested. Look into layout index 1 based on UI XML
+        form_layout = self.form.layout().itemAt(1).layout()
+        if isinstance(form_layout, QtWidgets.QFormLayout):
+            label = form_layout.labelForField(widget)
+            if label:
+                label.setVisible(is_visible)
 
     def _on_auto_update_changed(self, state):
-        """Toggles the refresh button and updates immediately when turned back on."""
         is_auto = self.form.auto_update_check.isChecked()
         self.form.refresh_button.setEnabled(not is_auto)
         if is_auto:
             self.force_preview()
 
     def queue_preview(self, *args):
-        """Intercepts the preview request if auto-update is disabled."""
         if hasattr(self.form, "auto_update_check") and not self.form.auto_update_check.isChecked():
             return
         super().queue_preview(*args)
 
     def force_preview(self, *args):
-        """Bypasses the auto-update check to force a refresh."""
         super().queue_preview(*args)
 
     def get_config_from_ui(self) -> LatticeConfig:
-        """Hydrates a configuration object from current UI widget states."""
-        mode = "cut" if self.form.operation_combo.currentIndex(
-        ) == 0 else "common"
+        mode = "cut" if self.form.operation_combo.currentIndex() == 0 else "common"
         return LatticeConfig(
             pattern=self.form.pattern_combo.currentText(),
             mapping=self.form.mapping_combo.currentText(),
@@ -91,6 +146,8 @@ class PatternTaskPanel(BaseTaskPanel):
             offset_x=self.form.offset_x_spin.value(),
             offset_y=self.form.offset_y_spin.value(),
             operation_mode=mode,
+            voronoi_seed=self.form.voronoi_seed_spin.value() if hasattr(self.form, "voronoi_seed_spin") else 12345,
+            voronoi_variance=self.form.voronoi_variance_spin.value() if hasattr(self.form, "voronoi_variance_spin") else 0.5
         )
 
     def get_shape(self, config: LatticeConfig, return_tool: bool = True):
@@ -124,7 +181,6 @@ class PatternTaskPanel(BaseTaskPanel):
             return self.get_shape(config, return_tool=True)
 
     def generate_final(self):
-        """Passes the hydrated config and target info to the workflow logic module."""
         config = self.get_config_from_ui()
         workflow.inject_lattice_into_document(self.target_obj, self.target_face,
                                               config, self.target_face_name)
